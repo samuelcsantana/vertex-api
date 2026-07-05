@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import { posts } from '../database/schema';
 import { CreatePostDto } from './dto/create-post.dto';
@@ -21,6 +21,13 @@ export class PostsService {
   async findAllPublished() {
     return this.databaseService.db.query.posts.findMany({
       where: eq(posts.isPublished, true),
+      orderBy: desc(posts.createdAt),
+    });
+  }
+
+  async findAllForDashboard() {
+    return this.databaseService.db.query.posts.findMany({
+      orderBy: desc(posts.createdAt),
     });
   }
 
