@@ -4,6 +4,7 @@ import {
   varchar,
   text,
   boolean,
+  jsonb,
   timestamp,
 } from 'drizzle-orm/pg-core';
 
@@ -11,6 +12,16 @@ export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: varchar('email').notNull().unique(),
   passwordHash: varchar('password_hash').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const projects = pgTable('projects', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: varchar('title').notNull(),
+  description: text('description').notNull(),
+  techStack: jsonb('tech_stack').$type<string[]>().notNull().default([]),
+  link: varchar('link'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
