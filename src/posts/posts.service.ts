@@ -1,13 +1,19 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { and, desc, eq } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
+import { UploadsService } from '../uploads/uploads.service';
 import { posts } from '../database/schema';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 
 @Injectable()
 export class PostsService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  private readonly logger = new Logger(PostsService.name);
+
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly uploadsService: UploadsService,
+  ) {}
 
   async create(createPostDto: CreatePostDto, authorId: string) {
     const [createdPost] = await this.databaseService.db
@@ -65,6 +71,20 @@ export class PostsService {
 
     if (!deletedPost) {
       throw new NotFoundException('Post not found');
+    }
+
+    const imageKeys = this.uploadsService.extractBucketKeysFromContent(
+      deletedPost.content,
+    );
+
+    if (imageKeys.length > 0) {
+      try {
+        await this.uploadsService.deleteFiles(imageKeys);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to delete S3 media for post ${id}: ${error instanceof Error ? error.message : error}`,
+        );
+      }
     }
 
     return deletedPost;

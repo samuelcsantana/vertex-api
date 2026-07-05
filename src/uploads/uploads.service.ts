@@ -1,14 +1,20 @@
 import { Injectable } from '@nestjs/common';
-import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectsCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { v4 as uuidv4 } from 'uuid';
 
 const PRESIGNED_URL_EXPIRES_IN_SECONDS = 60;
+const MARKDOWN_IMAGE_URL_PATTERN = /!\[.*?\]\((https:\/\/[^\s)]+)\)/g;
 
 @Injectable()
 export class UploadsService {
   private readonly s3Client: S3Client;
   private readonly bucketName: string;
+  private readonly bucketUrlPrefix: string;
 
   constructor() {
     const region = process.env.AWS_REGION;
@@ -23,6 +29,7 @@ export class UploadsService {
     }
 
     this.bucketName = bucketName;
+    this.bucketUrlPrefix = `https://${bucketName}.s3.${region}.amazonaws.com/`;
     this.s3Client = new S3Client({
       region,
       credentials: { accessKeyId, secretAccessKey },
@@ -30,7 +37,11 @@ export class UploadsService {
   }
 
   async getPresignedUrl(fileName: string, contentType: string) {
-    const fileKey = `${uuidv4()}-${fileName}`;
+    const date = new Date();
+    const folder = `blog-media/${date.getFullYear()}-${String(
+      date.getMonth() + 1,
+    ).padStart(2, '0')}`;
+    const fileKey = `${folder}/${uuidv4()}-${fileName}`;
 
     const command = new PutObjectCommand({
       Bucket: this.bucketName,
@@ -43,5 +54,27 @@ export class UploadsService {
     });
 
     return { presignedUrl, fileKey };
+  }
+
+  extractBucketKeysFromContent(content: string): string[] {
+    const matches = [...content.matchAll(MARKDOWN_IMAGE_URL_PATTERN)];
+
+    return matches
+      .map((match) => match[1])
+      .filter((url) => url.startsWith(this.bucketUrlPrefix))
+      .map((url) => url.slice(this.bucketUrlPrefix.length));
+  }
+
+  async deleteFiles(keys: string[]): Promise<void> {
+    if (keys.length === 0) {
+      return;
+    }
+
+    await this.s3Client.send(
+      new DeleteObjectsCommand({
+        Bucket: this.bucketName,
+        Delete: { Objects: keys.map((key) => ({ Key: key })) },
+      }),
+    );
   }
 }
