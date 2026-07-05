@@ -10,6 +10,7 @@ import { DatabaseService } from '../database/database.service';
 import { users } from '../database/schema';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { JwtPayload } from './interfaces/jwt-payload.interface';
 
 @Injectable()
 export class AuthService {
@@ -58,6 +59,8 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return this.jwtService.signAsync({ sub: user.id, email: user.email });
+    const payload: JwtPayload = { sub: user.id, email: user.email };
+
+    return this.jwtService.signAsync(payload);
   }
 }

@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply } from 'fastify';
 import { AuthService } from './auth.service';
-import { ZodValidationPipe } from './dto/zod-validation.pipe';
+import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { loginSchema } from './dto/login.dto';
 import type { LoginDto } from './dto/login.dto';
 import { registerSchema } from './dto/register.dto';

@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { DatabaseModule } from '../database/database.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
 if (!process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET environment variable is not defined');
@@ -17,6 +18,7 @@ if (!process.env.JWT_SECRET) {
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthService, JwtAuthGuard],
+  exports: [JwtAuthGuard],
 })
 export class AuthModule {}
