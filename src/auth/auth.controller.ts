@@ -1,13 +1,18 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
+  Req,
   Res,
+  UseGuards,
 } from '@nestjs/common';
-import type { FastifyReply } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
+import { ApiCookieAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { loginSchema } from './dto/login.dto';
 import type { LoginDto } from './dto/login.dto';
@@ -44,5 +49,13 @@ export class AuthController {
     });
 
     return { message: 'Login successful' };
+  }
+
+  @Get('profile')
+  @UseGuards(JwtAuthGuard)
+  @ApiCookieAuth('access_token')
+  @ApiOperation({ summary: 'Get current user profile' })
+  getProfile(@Req() request: FastifyRequest) {
+    return request.user;
   }
 }
