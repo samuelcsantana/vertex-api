@@ -42,6 +42,7 @@ export const posts = pgTable('posts', {
   slug: varchar('slug').notNull().unique(),
   content: text('content').notNull(),
   isPublished: boolean('is_published').default(false).notNull(),
+  allowComments: boolean('allow_comments').default(true).notNull(),
   authorId: uuid('author_id')
     .notNull()
     .references(() => users.id),
@@ -69,8 +70,25 @@ export const postsToTopics = pgTable(
   (table) => [primaryKey({ columns: [table.postId, table.topicId] })],
 );
 
+export const comments = pgTable('comments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  postId: uuid('post_id')
+    .notNull()
+    .references(() => posts.id, { onDelete: 'cascade' }),
+  authorId: uuid('author_id')
+    .notNull()
+    .references(() => users.id),
+  content: text('content').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const usersRelations = relations(users, ({ many }) => ({
+  comments: many(comments),
+}));
+
 export const postsRelations = relations(posts, ({ many }) => ({
   postsToTopics: many(postsToTopics),
+  comments: many(comments),
 }));
 
 export const topicsRelations = relations(topics, ({ many }) => ({
@@ -85,5 +103,16 @@ export const postsToTopicsRelations = relations(postsToTopics, ({ one }) => ({
   topic: one(topics, {
     fields: [postsToTopics.topicId],
     references: [topics.id],
+  }),
+}));
+
+export const commentsRelations = relations(comments, ({ one }) => ({
+  post: one(posts, {
+    fields: [comments.postId],
+    references: [posts.id],
+  }),
+  author: one(users, {
+    fields: [comments.authorId],
+    references: [users.id],
   }),
 }));
