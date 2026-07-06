@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -33,6 +34,17 @@ export class TopicsController {
     createTopicDto: CreateTopicDto,
   ) {
     return this.topicsService.create(createTopicDto);
+  }
+
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @ApiCookieAuth('access_token')
+  async update(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(createTopicSchema))
+    updateTopicDto: CreateTopicDto,
+  ) {
+    return this.topicsService.update(id, updateTopicDto);
   }
 
   @Delete(':id')

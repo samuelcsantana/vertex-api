@@ -27,6 +27,23 @@ export class TopicsService {
     });
   }
 
+  async update(id: string, updateTopicDto: CreateTopicDto) {
+    const [updatedTopic] = await this.databaseService.db
+      .update(topics)
+      .set({
+        name: updateTopicDto.name,
+        slug: slugify(updateTopicDto.name),
+      })
+      .where(eq(topics.id, id))
+      .returning();
+
+    if (!updatedTopic) {
+      throw new NotFoundException('Topic not found');
+    }
+
+    return updatedTopic;
+  }
+
   async remove(id: string) {
     const [deletedTopic] = await this.databaseService.db
       .delete(topics)
