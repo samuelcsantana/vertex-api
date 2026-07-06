@@ -13,6 +13,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ApiCookieAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { loginSchema } from './dto/login.dto';
 import type { LoginDto } from './dto/login.dto';
@@ -40,13 +41,7 @@ export class AuthController {
   ) {
     const token = await this.authService.login(loginDto);
 
-    res.setCookie('access_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/',
-      maxAge: SEVEN_DAYS_IN_SECONDS,
-    });
+    this.setAccessTokenCookie(res, token);
 
     return { message: 'Login successful' };
   }
@@ -57,5 +52,37 @@ export class AuthController {
   @ApiOperation({ summary: 'Get current user profile' })
   getProfile(@Req() request: FastifyRequest) {
     return request.user;
+  }
+
+  @Get('google')
+  @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Redirect to Google OAuth2 consent screen' })
+  googleAuth() {}
+
+  @Get('google/callback')
+  @UseGuards(GoogleAuthGuard)
+  @ApiOperation({ summary: 'Google OAuth2 callback' })
+  async googleAuthCallback(
+    @Req() request: FastifyRequest,
+    @Res() res: FastifyReply,
+  ) {
+    const token = await this.authService.generateAccessToken(request.user!);
+
+    this.setAccessTokenCookie(res, token);
+
+    return res.redirect(
+      process.env.FRONTEND_URL ?? 'http://localhost:3000/dashboard',
+      302,
+    );
+  }
+
+  private setAccessTokenCookie(res: FastifyReply, token: string) {
+    res.setCookie('access_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: SEVEN_DAYS_IN_SECONDS,
+    });
   }
 }
