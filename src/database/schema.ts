@@ -1,3 +1,4 @@
+import { relations } from 'drizzle-orm';
 import {
   pgTable,
   uuid,
@@ -7,6 +8,7 @@ import {
   jsonb,
   timestamp,
   pgEnum,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 
 export const userRoleEnum = pgEnum('role', ['user', 'admin']);
@@ -46,3 +48,42 @@ export const posts = pgTable('posts', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+
+export const topics = pgTable('topics', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  name: text('name').notNull().unique(),
+  slug: text('slug').notNull().unique(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const postsToTopics = pgTable(
+  'posts_to_topics',
+  {
+    postId: uuid('post_id')
+      .notNull()
+      .references(() => posts.id, { onDelete: 'cascade' }),
+    topicId: uuid('topic_id')
+      .notNull()
+      .references(() => topics.id, { onDelete: 'cascade' }),
+  },
+  (table) => [primaryKey({ columns: [table.postId, table.topicId] })],
+);
+
+export const postsRelations = relations(posts, ({ many }) => ({
+  postsToTopics: many(postsToTopics),
+}));
+
+export const topicsRelations = relations(topics, ({ many }) => ({
+  postsToTopics: many(postsToTopics),
+}));
+
+export const postsToTopicsRelations = relations(postsToTopics, ({ one }) => ({
+  post: one(posts, {
+    fields: [postsToTopics.postId],
+    references: [posts.id],
+  }),
+  topic: one(topics, {
+    fields: [postsToTopics.topicId],
+    references: [topics.id],
+  }),
+}));
