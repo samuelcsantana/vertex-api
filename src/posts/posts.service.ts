@@ -8,6 +8,9 @@ import { UpdatePostDto } from './dto/update-post.dto';
 
 const postWithTopicsQuery = {
   with: {
+    author: {
+      columns: { id: true, name: true, avatarUrl: true },
+    },
     postsToTopics: {
       with: {
         topic: true,
