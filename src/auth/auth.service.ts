@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -70,5 +71,28 @@ export class AuthService {
 
   async generateAccessToken(payload: JwtPayload): Promise<string> {
     return this.jwtService.signAsync(payload);
+  }
+
+  async getProfile(userId: string) {
+    // Re-fetched from the DB on every call rather than read off the JWT
+    // payload: githubId can change mid-session (account linking doesn't
+    // reissue the token), so the payload would otherwise report stale
+    // linked-account state until the user's next login.
+    const user = await this.databaseService.db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
+      githubId: user.githubId,
+    };
   }
 }

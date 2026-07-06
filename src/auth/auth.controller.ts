@@ -56,7 +56,7 @@ export class AuthController {
   @ApiCookieAuth('access_token')
   @ApiOperation({ summary: 'Get current user profile' })
   getProfile(@Req() request: FastifyRequest) {
-    return request.user;
+    return this.authService.getProfile(request.user!.sub);
   }
 
   @Get('google')
