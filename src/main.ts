@@ -16,7 +16,7 @@ async function bootstrap() {
   );
 
   app.enableCors({
-    origin: true,
+    origin: ['https://vertex-web-zeta.vercel.app'],
     credentials: true,
   });
 
