@@ -44,11 +44,26 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       return;
     }
 
-    let user = await this.databaseService.db.query.users.findFirst({
+    const name =
+      profile.displayName || profile.name?.givenName || 'Google User';
+    const avatarUrl =
+      profile.photos && profile.photos.length > 0
+        ? profile.photos[0].value
+        : null;
+
+    const existingUser = await this.databaseService.db.query.users.findFirst({
       where: eq(users.email, email),
     });
 
-    if (!user) {
+    let user: typeof users.$inferSelect;
+
+    if (existingUser) {
+      [user] = await this.databaseService.db
+        .update(users)
+        .set({ name, avatarUrl })
+        .where(eq(users.id, existingUser.id))
+        .returning();
+    } else {
       const role: UserRole =
         email === process.env.ADMIN_EMAIL ? 'admin' : 'user';
       const randomPassword = randomBytes(32).toString('hex');
@@ -58,7 +73,8 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
         .insert(users)
         .values({
           email,
-          name: profile.displayName,
+          name,
+          avatarUrl,
           passwordHash,
           role,
         })
@@ -69,6 +85,8 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       sub: user.id,
       email: user.email,
       role: user.role,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
     };
 
     done(null, payload);

@@ -6,7 +6,7 @@ import {
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, Profile } from 'passport-github2';
 import type { VerifyCallback } from 'passport-oauth2';
-import { eq } from 'drizzle-orm';
+import { eq, or } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import * as argon2 from 'argon2';
 import { DatabaseService } from '../../database/database.service';
@@ -50,29 +50,39 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
     profile: Profile,
     done: VerifyCallback,
   ): Promise<void> {
+    const githubId = profile.id;
     const emails: GithubEmail[] | undefined = profile.emails;
-    const email =
+    const realEmail =
       emails && emails.length > 0
         ? (emails.find((e) => e.primary)?.value ?? emails[0].value)
         : null;
 
-    if (!email) {
+    if (!githubId) {
       throw new BadRequestException(
-        'Não foi possível obter o email do GitHub. Verifique as configurações de privacidade da sua conta.',
+        'Não foi possível obter o identificador da conta do GitHub.',
       );
     }
 
+    const email = realEmail ?? `github-${githubId}@guest.local`;
     const name = profile.displayName || profile.username || 'GitHub User';
+    const avatarUrl =
+      profile.photos && profile.photos.length > 0
+        ? profile.photos[0].value
+        : null;
 
     let user: typeof users.$inferSelect;
 
     try {
       const existingUser = await this.databaseService.db.query.users.findFirst({
-        where: eq(users.email, email),
+        where: or(eq(users.githubId, githubId), eq(users.email, email)),
       });
 
       if (existingUser) {
-        user = existingUser;
+        [user] = await this.databaseService.db
+          .update(users)
+          .set({ githubId, name, avatarUrl })
+          .where(eq(users.id, existingUser.id))
+          .returning();
       } else {
         const role: UserRole =
           email === process.env.ADMIN_EMAIL ? 'admin' : 'user';
@@ -82,8 +92,10 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
         [user] = await this.databaseService.db
           .insert(users)
           .values({
+            githubId,
             email,
             name,
+            avatarUrl,
             passwordHash,
             role,
           })
@@ -100,6 +112,8 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
       sub: user.id,
       email: user.email,
       role: user.role,
+      name: user.name,
+      avatarUrl: user.avatarUrl,
     };
 
     done(null, payload);

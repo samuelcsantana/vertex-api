@@ -15,6 +15,13 @@
       "when": 1783298161235,
       "tag": "0001_robust_sharon_carter",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783349366729,
+      "tag": "0002_goofy_pixie",
+      "breakpoints": true
     }
   ]
 }
