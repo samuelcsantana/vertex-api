@@ -7,15 +7,17 @@ import {
   Post,
   Req,
   Res,
+  UseFilters,
   UseGuards,
 } from '@nestjs/common';
-import { randomBytes } from 'crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ApiCookieAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { GithubAuthGuard } from './guards/github-auth.guard';
+import { GithubPopupExceptionFilter } from './filters/github-popup-exception.filter';
+import { sendPopupScript } from './utils/popup-response.util';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { loginSchema } from './dto/login.dto';
 import type { LoginDto } from './dto/login.dto';
@@ -23,6 +25,7 @@ import { registerSchema } from './dto/register.dto';
 import type { RegisterDto } from './dto/register.dto';
 
 const SEVEN_DAYS_IN_SECONDS = 7 * 24 * 60 * 60;
+const LINK_COOKIE_MAX_AGE_SECONDS = 5 * 60;
 
 @Controller('auth')
 export class AuthController {
@@ -76,13 +79,40 @@ export class AuthController {
   @ApiOperation({ summary: 'Redirect to GitHub OAuth2 consent screen' })
   githubAuth() {}
 
+  @Get('github/link')
+  @UseGuards(JwtAuthGuard)
+  @ApiCookieAuth('access_token')
+  @ApiOperation({
+    summary: 'Start linking a GitHub account to the logged-in user',
+  })
+  githubLink(@Req() request: FastifyRequest, @Res() res: FastifyReply) {
+    res.setCookie('link_user_id', request.user!.sub, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      signed: true,
+      maxAge: LINK_COOKIE_MAX_AGE_SECONDS,
+    });
+
+    return res.redirect('/auth/github', HttpStatus.FOUND);
+  }
+
   @Get('github/callback')
   @UseGuards(GithubAuthGuard)
+  @UseFilters(GithubPopupExceptionFilter)
   @ApiOperation({ summary: 'GitHub OAuth2 callback' })
   async githubAuthCallback(
     @Req() request: FastifyRequest,
     @Res() res: FastifyReply,
   ) {
+    const isLinkFlow = Boolean(request.cookies?.link_user_id);
+
+    if (isLinkFlow) {
+      res.clearCookie('link_user_id', { path: '/' });
+      return sendPopupScript(res, 'window.close();');
+    }
+
     return this.handleOAuthCallback(request, res);
   }
 
@@ -94,22 +124,11 @@ export class AuthController {
 
     this.setAccessTokenCookie(res, token);
 
-    // Helmet's default CSP blocks inline scripts; scope a nonce to just this
-    // response instead of weakening the app-wide script-src policy.
-    const nonce = randomBytes(16).toString('base64');
-    res.header(
-      'Content-Security-Policy',
-      `script-src 'self' 'nonce-${nonce}'; object-src 'none'`,
-    );
-    res.header('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
-
     // The OAuth provider's own pages send a strict COOP header, which
     // permanently severs window.opener before this popup ever gets here — so
     // the opener can't be reached via postMessage. The frontend instead polls
     // popup.closed, so this only needs to close the window itself.
-    return res
-      .type('text/html')
-      .send(`<script nonce="${nonce}">window.close();</script>`);
+    return sendPopupScript(res, 'window.close();');
   }
 
   private setAccessTokenCookie(res: FastifyReply, token: string) {

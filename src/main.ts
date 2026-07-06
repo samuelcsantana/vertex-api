@@ -20,10 +20,16 @@ async function bootstrap() {
     credentials: true,
   });
 
+  const cookieSecret = process.env.COOKIE_SECRET;
+
+  if (!cookieSecret) {
+    throw new Error('COOKIE_SECRET environment variable is not defined');
+  }
+
   await app.register(helmet, {
     crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
   });
-  await app.register(cookie);
+  await app.register(cookie, { secret: cookieSecret });
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Vertex API')
