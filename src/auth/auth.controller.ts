@@ -71,10 +71,6 @@ export class AuthController {
 
     this.setAccessTokenCookie(res, token);
 
-    const frontendUrl =
-      process.env.FRONTEND_URL ?? 'http://localhost:3000/dashboard';
-    const targetOrigin = new URL(frontendUrl).origin;
-
     // Helmet's default CSP blocks inline scripts; scope a nonce to just this
     // response instead of weakening the app-wide script-src policy.
     const nonce = randomBytes(16).toString('base64');
@@ -84,11 +80,13 @@ export class AuthController {
     );
     res.header('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
 
+    // Google's own OAuth pages send a strict COOP header, which permanently
+    // severs window.opener before this popup ever gets here — so the opener
+    // can't be reached via postMessage. The frontend instead polls
+    // popup.closed, so this only needs to close the window itself.
     return res
       .type('text/html')
-      .send(
-        `<script nonce="${nonce}">window.opener.postMessage('oauth-success', '${targetOrigin}'); window.close();</script>`,
-      );
+      .send(`<script nonce="${nonce}">window.close();</script>`);
   }
 
   private setAccessTokenCookie(res: FastifyReply, token: string) {
