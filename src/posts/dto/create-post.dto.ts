@@ -2,11 +2,13 @@ import { z } from 'zod';
 
 export const createPostSchema = z.object({
   title: z.string().min(1),
+  titleEn: z.string().optional(),
   slug: z
     .string()
     .min(1)
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug must be a URL-friendly string'),
   content: z.string().min(1),
+  contentEn: z.string().optional(),
   isPublished: z.boolean().optional(),
   allowComments: z.boolean().optional(),
   coverUrl: z.string().url().optional(),

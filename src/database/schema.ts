@@ -39,8 +39,10 @@ export const projects = pgTable('projects', {
 export const posts = pgTable('posts', {
   id: uuid('id').primaryKey().defaultRandom(),
   title: varchar('title').notNull(),
+  titleEn: text('title_en'),
   slug: varchar('slug').notNull().unique(),
   content: text('content').notNull(),
+  contentEn: text('content_en'),
   isPublished: boolean('is_published').default(false).notNull(),
   allowComments: boolean('allow_comments').default(true).notNull(),
   coverUrl: text('cover_url'),
