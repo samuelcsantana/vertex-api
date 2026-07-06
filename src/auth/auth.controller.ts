@@ -9,6 +9,7 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
+import { randomBytes } from 'crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ApiCookieAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -70,10 +71,23 @@ export class AuthController {
 
     this.setAccessTokenCookie(res, token);
 
-    return res.redirect(
-      process.env.FRONTEND_URL ?? 'http://localhost:3000/dashboard',
-      302,
+    const frontendUrl =
+      process.env.FRONTEND_URL ?? 'http://localhost:3000/dashboard';
+    const targetOrigin = new URL(frontendUrl).origin;
+
+    // Helmet's default CSP blocks inline scripts; scope a nonce to just this
+    // response instead of weakening the app-wide script-src policy.
+    const nonce = randomBytes(16).toString('base64');
+    res.header(
+      'Content-Security-Policy',
+      `script-src 'self' 'nonce-${nonce}'; object-src 'none'`,
     );
+
+    return res
+      .type('text/html')
+      .send(
+        `<script nonce="${nonce}">window.opener.postMessage('oauth-success', '${targetOrigin}'); window.close();</script>`,
+      );
   }
 
   private setAccessTokenCookie(res: FastifyReply, token: string) {
