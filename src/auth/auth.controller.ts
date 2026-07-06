@@ -15,6 +15,7 @@ import { ApiCookieAuth, ApiOperation } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
+import { GithubAuthGuard } from './guards/github-auth.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { loginSchema } from './dto/login.dto';
 import type { LoginDto } from './dto/login.dto';
@@ -67,6 +68,28 @@ export class AuthController {
     @Req() request: FastifyRequest,
     @Res() res: FastifyReply,
   ) {
+    return this.handleOAuthCallback(request, res);
+  }
+
+  @Get('github')
+  @UseGuards(GithubAuthGuard)
+  @ApiOperation({ summary: 'Redirect to GitHub OAuth2 consent screen' })
+  githubAuth() {}
+
+  @Get('github/callback')
+  @UseGuards(GithubAuthGuard)
+  @ApiOperation({ summary: 'GitHub OAuth2 callback' })
+  async githubAuthCallback(
+    @Req() request: FastifyRequest,
+    @Res() res: FastifyReply,
+  ) {
+    return this.handleOAuthCallback(request, res);
+  }
+
+  private async handleOAuthCallback(
+    request: FastifyRequest,
+    res: FastifyReply,
+  ) {
     const token = await this.authService.generateAccessToken(request.user!);
 
     this.setAccessTokenCookie(res, token);
@@ -80,9 +103,9 @@ export class AuthController {
     );
     res.header('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
 
-    // Google's own OAuth pages send a strict COOP header, which permanently
-    // severs window.opener before this popup ever gets here — so the opener
-    // can't be reached via postMessage. The frontend instead polls
+    // The OAuth provider's own pages send a strict COOP header, which
+    // permanently severs window.opener before this popup ever gets here — so
+    // the opener can't be reached via postMessage. The frontend instead polls
     // popup.closed, so this only needs to close the window itself.
     return res
       .type('text/html')

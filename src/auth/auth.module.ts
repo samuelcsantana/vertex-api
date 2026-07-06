@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AdminGuard } from './guards/admin.guard';
 import { GoogleStrategy } from './strategies/google.strategy';
+import { GithubStrategy } from './strategies/github.strategy';
 
 if (!process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET environment variable is not defined');
@@ -20,7 +21,13 @@ if (!process.env.JWT_SECRET) {
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard, AdminGuard, GoogleStrategy],
+  providers: [
+    AuthService,
+    JwtAuthGuard,
+    AdminGuard,
+    GoogleStrategy,
+    GithubStrategy,
+  ],
   exports: [JwtAuthGuard, AdminGuard, JwtModule],
 })
 export class AuthModule {}
