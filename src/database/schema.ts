@@ -51,6 +51,14 @@ export const posts = pgTable('posts', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
+// Singleton: exactly one row holds the editable content for the public
+// About page — there is no list/CRUD concept here, just get/update.
+export const aboutContent = pgTable('about_content', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  content: text('content').notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 export const topics = pgTable('topics', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: text('name').notNull().unique(),

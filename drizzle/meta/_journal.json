@@ -43,6 +43,13 @@
       "when": 1783361236104,
       "tag": "0005_curly_eternity",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1783366002891,
+      "tag": "0006_even_ted_forrester",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,7 @@ import { UploadsModule } from './uploads/uploads.module';
 import { ProjectsModule } from './projects/projects.module';
 import { TopicsModule } from './topics/topics.module';
 import { CommentsModule } from './comments/comments.module';
+import { AboutModule } from './about/about.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { CommentsModule } from './comments/comments.module';
     ProjectsModule,
     TopicsModule,
     CommentsModule,
+    AboutModule,
   ],
   controllers: [AppController],
   providers: [AppService],
