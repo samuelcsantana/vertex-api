@@ -20,7 +20,9 @@ async function bootstrap() {
     credentials: true,
   });
 
-  await app.register(helmet);
+  await app.register(helmet, {
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+  });
   await app.register(cookie);
 
   const swaggerConfig = new DocumentBuilder()

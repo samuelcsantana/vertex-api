@@ -82,6 +82,7 @@ export class AuthController {
       'Content-Security-Policy',
       `script-src 'self' 'nonce-${nonce}'; object-src 'none'`,
     );
+    res.header('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
 
     return res
       .type('text/html')
