@@ -73,7 +73,9 @@ async function seedAboutContent(db: ReturnType<typeof drizzle<typeof schema>>) {
     return;
   }
 
-  await db.insert(schema.aboutContent).values({ content: DEFAULT_ABOUT_CONTENT });
+  await db
+    .insert(schema.aboutContent)
+    .values({ content: DEFAULT_ABOUT_CONTENT });
 
   console.log('Seeded default About content.');
 }

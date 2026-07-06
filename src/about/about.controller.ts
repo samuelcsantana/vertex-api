@@ -21,7 +21,8 @@ export class AboutController {
   @UseGuards(JwtAuthGuard, AdminGuard)
   @ApiCookieAuth('access_token')
   async update(
-    @Body(new ZodValidationPipe(updateAboutSchema)) updateAboutDto: UpdateAboutDto,
+    @Body(new ZodValidationPipe(updateAboutSchema))
+    updateAboutDto: UpdateAboutDto,
   ) {
     return this.aboutService.update(updateAboutDto);
   }

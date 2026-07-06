@@ -9,7 +9,8 @@ export class AboutService {
   constructor(private readonly databaseService: DatabaseService) {}
 
   async get() {
-    const existing = await this.databaseService.db.query.aboutContent.findFirst();
+    const existing =
+      await this.databaseService.db.query.aboutContent.findFirst();
 
     if (existing) {
       return existing;
@@ -24,7 +25,8 @@ export class AboutService {
   }
 
   async update(updateAboutDto: UpdateAboutDto) {
-    const existing = await this.databaseService.db.query.aboutContent.findFirst();
+    const existing =
+      await this.databaseService.db.query.aboutContent.findFirst();
 
     if (!existing) {
       const [created] = await this.databaseService.db
