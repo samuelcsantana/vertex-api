@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AdminGuard } from '../auth/guards/admin.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { createProjectSchema } from './dto/create-project.dto';
 import type { CreateProjectDto } from './dto/create-project.dto';
@@ -33,7 +34,7 @@ export class ProjectsController {
   }
 
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @ApiCookieAuth('access_token')
   async create(
     @Body(new ZodValidationPipe(createProjectSchema))
@@ -43,7 +44,7 @@ export class ProjectsController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @ApiCookieAuth('access_token')
   async update(
     @Param('id') id: string,
@@ -54,7 +55,7 @@ export class ProjectsController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @ApiCookieAuth('access_token')
   async remove(@Param('id') id: string) {
     return this.projectsService.remove(id);

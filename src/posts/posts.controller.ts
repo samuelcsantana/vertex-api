@@ -12,6 +12,7 @@ import {
 import type { FastifyRequest } from 'fastify';
 import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { AdminGuard } from '../auth/guards/admin.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { createPostSchema } from './dto/create-post.dto';
 import type { CreatePostDto } from './dto/create-post.dto';
@@ -35,7 +36,7 @@ export class PostsController {
   }
 
   @Post()
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @ApiCookieAuth('access_token')
   async create(
     @Body(new ZodValidationPipe(createPostSchema)) createPostDto: CreatePostDto,
@@ -47,7 +48,7 @@ export class PostsController {
   }
 
   @Patch(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @ApiCookieAuth('access_token')
   async update(
     @Param('id') id: string,
@@ -57,7 +58,7 @@ export class PostsController {
   }
 
   @Delete(':id')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @ApiCookieAuth('access_token')
   async remove(@Param('id') id: string) {
     return this.postsService.remove(id);

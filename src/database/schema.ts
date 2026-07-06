@@ -6,12 +6,17 @@ import {
   boolean,
   jsonb,
   timestamp,
+  pgEnum,
 } from 'drizzle-orm/pg-core';
+
+export const userRoleEnum = pgEnum('role', ['user', 'admin']);
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: varchar('email').notNull().unique(),
   passwordHash: varchar('password_hash').notNull(),
+  name: varchar('name'),
+  role: userRoleEnum('role').default('user').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

@@ -2,9 +2,11 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, Profile, VerifyCallback } from 'passport-google-oauth20';
 import { eq } from 'drizzle-orm';
+import { randomBytes } from 'crypto';
+import * as argon2 from 'argon2';
 import { DatabaseService } from '../../database/database.service';
 import { users } from '../../database/schema';
-import { JwtPayload } from '../interfaces/jwt-payload.interface';
+import { JwtPayload, UserRole } from '../interfaces/jwt-payload.interface';
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
@@ -42,16 +44,32 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       return;
     }
 
-    const user = await this.databaseService.db.query.users.findFirst({
+    let user = await this.databaseService.db.query.users.findFirst({
       where: eq(users.email, email),
     });
 
     if (!user) {
-      done(new UnauthorizedException('User is not registered'), false);
-      return;
+      const role: UserRole =
+        email === process.env.ADMIN_EMAIL ? 'admin' : 'user';
+      const randomPassword = randomBytes(32).toString('hex');
+      const passwordHash = await argon2.hash(randomPassword);
+
+      [user] = await this.databaseService.db
+        .insert(users)
+        .values({
+          email,
+          name: profile.displayName,
+          passwordHash,
+          role,
+        })
+        .returning();
     }
 
-    const payload: JwtPayload = { sub: user.id, email: user.email };
+    const payload: JwtPayload = {
+      sub: user.id,
+      email: user.email,
+      role: user.role,
+    };
 
     done(null, payload);
   }

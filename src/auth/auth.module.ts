@@ -4,6 +4,7 @@ import { DatabaseModule } from '../database/database.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { AdminGuard } from './guards/admin.guard';
 import { GoogleStrategy } from './strategies/google.strategy';
 
 if (!process.env.JWT_SECRET) {
@@ -19,7 +20,7 @@ if (!process.env.JWT_SECRET) {
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtAuthGuard, GoogleStrategy],
-  exports: [JwtAuthGuard, JwtModule],
+  providers: [AuthService, JwtAuthGuard, AdminGuard, GoogleStrategy],
+  exports: [JwtAuthGuard, AdminGuard, JwtModule],
 })
 export class AuthModule {}
