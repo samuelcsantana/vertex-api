@@ -9,6 +9,7 @@ export const createPostSchema = z.object({
   content: z.string().min(1),
   isPublished: z.boolean().optional(),
   allowComments: z.boolean().optional(),
+  coverUrl: z.string().url().optional(),
   topicIds: z.array(z.string().uuid()).optional(),
 });
 

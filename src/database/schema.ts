@@ -43,6 +43,7 @@ export const posts = pgTable('posts', {
   content: text('content').notNull(),
   isPublished: boolean('is_published').default(false).notNull(),
   allowComments: boolean('allow_comments').default(true).notNull(),
+  coverUrl: text('cover_url'),
   authorId: uuid('author_id')
     .notNull()
     .references(() => users.id),
