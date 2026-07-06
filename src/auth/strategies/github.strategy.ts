@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, Profile } from 'passport-github2';
 import type { VerifyCallback } from 'passport-oauth2';
@@ -8,6 +12,14 @@ import * as argon2 from 'argon2';
 import { DatabaseService } from '../../database/database.service';
 import { users } from '../../database/schema';
 import { JwtPayload, UserRole } from '../interfaces/jwt-payload.interface';
+
+// passport-github2's typings omit `primary`/`verified`, which GitHub does
+// include on each entry in the `user:email` scope response.
+interface GithubEmail {
+  value: string;
+  primary?: boolean;
+  verified?: boolean;
+}
 
 @Injectable()
 export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
@@ -38,32 +50,50 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
     profile: Profile,
     done: VerifyCallback,
   ): Promise<void> {
-    const email = profile.emails?.[0]?.value;
+    const emails: GithubEmail[] | undefined = profile.emails;
+    const email =
+      emails && emails.length > 0
+        ? (emails.find((e) => e.primary)?.value ?? emails[0].value)
+        : null;
 
     if (!email) {
-      done(new UnauthorizedException('GitHub account has no email'), false);
-      return;
+      throw new BadRequestException(
+        'Não foi possível obter o email do GitHub. Verifique as configurações de privacidade da sua conta.',
+      );
     }
 
-    let user = await this.databaseService.db.query.users.findFirst({
-      where: eq(users.email, email),
-    });
+    const name = profile.displayName || profile.username || 'GitHub User';
 
-    if (!user) {
-      const role: UserRole =
-        email === process.env.ADMIN_EMAIL ? 'admin' : 'user';
-      const randomPassword = randomBytes(32).toString('hex');
-      const passwordHash = await argon2.hash(randomPassword);
+    let user: typeof users.$inferSelect;
 
-      [user] = await this.databaseService.db
-        .insert(users)
-        .values({
-          email,
-          name: profile.displayName,
-          passwordHash,
-          role,
-        })
-        .returning();
+    try {
+      const existingUser = await this.databaseService.db.query.users.findFirst({
+        where: eq(users.email, email),
+      });
+
+      if (existingUser) {
+        user = existingUser;
+      } else {
+        const role: UserRole =
+          email === process.env.ADMIN_EMAIL ? 'admin' : 'user';
+        const randomPassword = randomBytes(32).toString('hex');
+        const passwordHash = await argon2.hash(randomPassword);
+
+        [user] = await this.databaseService.db
+          .insert(users)
+          .values({
+            email,
+            name,
+            passwordHash,
+            role,
+          })
+          .returning();
+      }
+    } catch (error) {
+      console.error('Erro na estratégia do GitHub:', error);
+      throw new InternalServerErrorException(
+        'Failed to authenticate with GitHub',
+      );
     }
 
     const payload: JwtPayload = {
