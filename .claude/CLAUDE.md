@@ -53,9 +53,11 @@ Every `POST`/`PATCH`/`DELETE` across posts, topics, about-page content, and uplo
   - `develop`: Integration branch for upcoming releases.
   - `feature/*`: For new features (branching off from `develop`).
   - `bugfix/*` / `hotfix/*`: For fixing issues.
-- **Semantic Commits (Conventional Commits):** ALL commit messages MUST follow the Conventional Commits specification strictly in English (e.g., `feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `test:`).
-- **Atomic Commits:** Commits MUST be atomic. Each commit should represent a single, logical change. Do not bundle unrelated changes into a single commit.
-- **AI Git Execution:** When asked to commit changes, the AI MUST analyze the staged files, craft an appropriate Semantic Commit message in English, and ensure the commit represents an atomic change.
+- **`main` is branch-protected — there is no direct push, not even for admins.** `enforce_admins` is on, force-push and branch deletion are off, and the repo only allows Squash and Merge (merge commits and rebase merges are disabled at the repo level). Every change reaches `main` through a PR from a `feature/*`/`bugfix/*` branch: `git checkout -b feat/x`, commit freely (draft commits don't need to be clean — they get squashed away), `git push -u origin feat/x`, `gh pr create`, then `gh pr merge --squash --delete-branch`, using the PR title/body as the final, professional Conventional Commit message. After merging, sync `develop` (`git checkout develop && git merge origin/main && git push origin develop && git checkout main && git pull`) — `develop` itself isn't protected, so this fast-forward push works directly.
+- **Semantic Commits (Conventional Commits):** ALL commit messages MUST follow the Conventional Commits specification strictly in English (e.g., `feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `test:`). This applies above all to the final squash-merge commit that actually lands on `main` — the throwaway commits on a feature branch don't need to individually satisfy this.
+- **Atomic Commits:** Each squash-merged PR should represent a single, logical, atomic change. Do not bundle unrelated changes into a single PR.
+- **AI Git Execution:** When asked to commit changes, the AI MUST branch off first (never commit directly to `main`), craft an appropriate Semantic Commit message in English for the eventual squash-merge, and ensure the PR represents an atomic change.
+- **Releases:** Tag stable milestones with SemVer (`git tag vX.Y.Z && git push origin vX.Y.Z`) and publish a real GitHub Release from that tag (`gh release create vX.Y.Z --generate-notes`, then hand-edit the body — GitHub's auto-generated notes are only useful once there's real merged-PR history to summarize from).
 
 ## 🤖 AI Assistant Directives
 1. **Always read this file** when starting a new session, creating new features, or answering architectural questions.
