@@ -15,8 +15,13 @@ async function bootstrap() {
     new FastifyAdapter(),
   );
 
+  // Same env var (and fallback) the OAuth callback redirect uses, so there's
+  // one source of truth for vertex-web's origin instead of two that could
+  // drift apart if the frontend's deployed URL ever changes.
+  const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
+
   app.enableCors({
-    origin: ['https://vertex-web-zeta.vercel.app'],
+    origin: [frontendUrl],
     credentials: true,
   });
 
