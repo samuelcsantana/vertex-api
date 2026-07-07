@@ -99,6 +99,8 @@ describe('PostsService', () => {
       service: new PostsService(databaseService, uploadsService),
       txInsertValues,
       txUpdateSet,
+      txDelete,
+      txInsert,
       uploadsService,
     };
   }
@@ -155,6 +157,17 @@ describe('PostsService', () => {
     });
   });
 
+  describe('findAllForDashboard', () => {
+    it('flattens postsToTopics for every result, published or not', async () => {
+      const findMany = jest.fn().mockResolvedValue([rawPostWithTopics]);
+      const { service } = createService({ findMany });
+
+      await expect(service.findAllForDashboard()).resolves.toEqual([
+        flattenedPost,
+      ]);
+    });
+  });
+
   describe('findPublishedBySlug', () => {
     it('returns the flattened post when found', async () => {
       const findFirst = jest.fn().mockResolvedValue(rawPostWithTopics);
@@ -194,6 +207,33 @@ describe('PostsService', () => {
       await expect(
         service.update('missing', { title: 'Updated' }),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('reassigns topics when topicIds is provided', async () => {
+      const { service, txDelete, txInsert } = createService({});
+
+      await service.update('post-1', { topicIds: ['t2', 't3'] });
+
+      expect(txDelete).toHaveBeenCalled();
+      expect(txInsert).toHaveBeenCalled();
+    });
+
+    it('clears topics when topicIds is an empty array', async () => {
+      const { service, txDelete, txInsert } = createService({});
+      txInsert.mockClear();
+
+      await service.update('post-1', { topicIds: [] });
+
+      expect(txDelete).toHaveBeenCalled();
+      expect(txInsert).not.toHaveBeenCalled();
+    });
+
+    it('leaves topics untouched when topicIds is not provided', async () => {
+      const { service, txDelete } = createService({});
+
+      await service.update('post-1', { title: 'Updated only' });
+
+      expect(txDelete).not.toHaveBeenCalled();
     });
   });
 
