@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { asc, eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import { comments, posts } from '../database/schema';
 import { UserRole } from '../auth/interfaces/jwt-payload.interface';
@@ -17,7 +17,7 @@ export class CommentsService {
   async findAllForPost(postId: string) {
     return this.databaseService.db.query.comments.findMany({
       where: eq(comments.postId, postId),
-      orderBy: asc(comments.createdAt),
+      orderBy: desc(comments.createdAt),
       with: {
         author: {
           columns: { id: true, name: true, avatarUrl: true },
