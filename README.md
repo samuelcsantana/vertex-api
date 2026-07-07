@@ -3,6 +3,7 @@
 [![CI](https://github.com/samuelcsantana/vertex-api/actions/workflows/ci.yml/badge.svg)](https://github.com/samuelcsantana/vertex-api/actions/workflows/ci.yml)
 [![Tests](https://github.com/samuelcsantana/vertex-api/actions/workflows/tests.yml/badge.svg)](https://github.com/samuelcsantana/vertex-api/actions/workflows/tests.yml)
 [![Security](https://github.com/samuelcsantana/vertex-api/actions/workflows/security.yml/badge.svg)](https://github.com/samuelcsantana/vertex-api/actions/workflows/security.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
 The NestJS backend for **[samuel.dev](https://vertex-web-zeta.vercel.app)**, a personal engineering blog and technical portfolio. Serves posts, topics, comments, and auth to **[vertex-web](https://github.com/samuelcsantana/vertex-web)**, the Next.js frontend, over a REST API — deployed on a different domain (Render vs. Vercel), which shapes a few of the decisions below.
 
