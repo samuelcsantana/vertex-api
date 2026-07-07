@@ -1,5 +1,10 @@
-import { UnauthorizedException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import * as argon2 from 'argon2';
 import { AuthService } from './auth.service';
 import { DatabaseService } from '../database/database.service';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
@@ -78,5 +83,140 @@ describe('AuthService — OAuth exchange codes', () => {
     const codeB = service.createOAuthExchangeCode(payload);
 
     expect(codeA).not.toBe(codeB);
+  });
+});
+
+describe('AuthService — register/login/getProfile', () => {
+  // Real argon2 throughout this block, deliberately not mocked: the whole
+  // point of these tests is confirming a wrong password is actually
+  // rejected and a right one actually accepted, which a mocked hash/verify
+  // pair couldn't tell you anything about.
+  function createService(findFirst: jest.Mock, insertReturning?: jest.Mock) {
+    const returning =
+      insertReturning ?? jest.fn().mockResolvedValue([{ id: 'user-1' }]);
+    const values = jest.fn().mockReturnValue({ returning });
+    const insert = jest.fn().mockReturnValue({ values });
+
+    const databaseService = {
+      db: { query: { users: { findFirst } }, insert },
+    } as unknown as DatabaseService;
+    const jwtService = {
+      signAsync: jest.fn().mockResolvedValue('fake.jwt.token'),
+    } as unknown as JwtService;
+
+    return new AuthService(databaseService, jwtService);
+  }
+
+  describe('register', () => {
+    it('creates a new user when the email is not already taken', async () => {
+      const findFirst = jest.fn().mockResolvedValue(undefined);
+      const returning = jest
+        .fn()
+        .mockResolvedValue([{ id: 'user-1', email: 'new@example.com' }]);
+      const service = createService(findFirst, returning);
+
+      const result = await service.register({
+        email: 'new@example.com',
+        password: 'testpass123',
+      });
+
+      expect(result).toEqual({ id: 'user-1', email: 'new@example.com' });
+    });
+
+    it('rejects a duplicate email with ConflictException', async () => {
+      const findFirst = jest
+        .fn()
+        .mockResolvedValue({ id: 'existing', email: 'taken@example.com' });
+      const service = createService(findFirst);
+
+      await expect(
+        service.register({ email: 'taken@example.com', password: 'x' }),
+      ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('login', () => {
+    it('rejects a login for an email that does not exist', async () => {
+      const findFirst = jest.fn().mockResolvedValue(undefined);
+      const service = createService(findFirst);
+
+      await expect(
+        service.login({ email: 'nobody@example.com', password: 'x' }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('rejects the wrong password for a real user', async () => {
+      const passwordHash = await argon2.hash('correct-password');
+      const findFirst = jest.fn().mockResolvedValue({
+        id: 'user-1',
+        email: 'user@example.com',
+        passwordHash,
+        role: 'user',
+        name: null,
+        avatarUrl: null,
+      });
+      const service = createService(findFirst);
+
+      await expect(
+        service.login({
+          email: 'user@example.com',
+          password: 'wrong-password',
+        }),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('issues a token for the correct password', async () => {
+      const passwordHash = await argon2.hash('correct-password');
+      const findFirst = jest.fn().mockResolvedValue({
+        id: 'user-1',
+        email: 'user@example.com',
+        passwordHash,
+        role: 'user',
+        name: null,
+        avatarUrl: null,
+      });
+      const service = createService(findFirst);
+
+      const token = await service.login({
+        email: 'user@example.com',
+        password: 'correct-password',
+      });
+
+      expect(token).toBe('fake.jwt.token');
+    });
+  });
+
+  describe('getProfile', () => {
+    it('returns the profile shape for an existing user', async () => {
+      const findFirst = jest.fn().mockResolvedValue({
+        id: 'user-1',
+        email: 'user@example.com',
+        role: 'admin',
+        name: 'Test User',
+        avatarUrl: null,
+        githubId: 'gh-1',
+      });
+      const service = createService(findFirst);
+
+      const profile = await service.getProfile('user-1');
+
+      expect(profile).toEqual({
+        sub: 'user-1',
+        email: 'user@example.com',
+        role: 'admin',
+        name: 'Test User',
+        avatarUrl: null,
+        githubId: 'gh-1',
+      });
+    });
+
+    it('throws NotFoundException for a user that does not exist', async () => {
+      const findFirst = jest.fn().mockResolvedValue(undefined);
+      const service = createService(findFirst);
+
+      await expect(service.getProfile('missing-user')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
   });
 });
