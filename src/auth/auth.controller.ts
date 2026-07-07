@@ -122,13 +122,18 @@ export class AuthController {
   ) {
     const token = await this.authService.generateAccessToken(request.user!);
 
-    this.setAccessTokenCookie(res, token);
+    // vertex-web and vertex-api are on different domains (Vercel vs Render),
+    // so a cookie set here would be scoped to this API's own domain and the
+    // frontend's cookies() calls could never see it — no amount of polling
+    // bridges that gap. Redirecting the popup to the frontend's own callback
+    // route instead lets vertex-web set the cookie itself, on its own
+    // domain, via a Server Action.
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
 
-    // The OAuth provider's own pages send a strict COOP header, which
-    // permanently severs window.opener before this popup ever gets here — so
-    // the opener can't be reached via postMessage. The frontend instead polls
-    // popup.closed, so this only needs to close the window itself.
-    return sendPopupScript(res, 'window.close();');
+    return res.redirect(
+      `${frontendUrl}/auth/callback?token=${encodeURIComponent(token)}`,
+      HttpStatus.FOUND,
+    );
   }
 
   private setAccessTokenCookie(res: FastifyReply, token: string) {
