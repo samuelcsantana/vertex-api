@@ -23,6 +23,8 @@ import { loginSchema } from './dto/login.dto';
 import type { LoginDto } from './dto/login.dto';
 import { registerSchema } from './dto/register.dto';
 import type { RegisterDto } from './dto/register.dto';
+import { exchangeSchema } from './dto/exchange.dto';
+import type { ExchangeDto } from './dto/exchange.dto';
 
 const SEVEN_DAYS_IN_SECONDS = 7 * 24 * 60 * 60;
 const LINK_COOKIE_MAX_AGE_SECONDS = 5 * 60;
@@ -49,6 +51,20 @@ export class AuthController {
     this.setAccessTokenCookie(res, token);
 
     return { message: 'Login successful' };
+  }
+
+  @Post('exchange')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Exchange a short-lived OAuth code (from /auth/callback) for a real access token',
+  })
+  async exchange(
+    @Body(new ZodValidationPipe(exchangeSchema)) exchangeDto: ExchangeDto,
+  ) {
+    const token = await this.authService.exchangeOAuthCode(exchangeDto.code);
+
+    return { access_token: token };
   }
 
   @Get('profile')
@@ -116,22 +132,24 @@ export class AuthController {
     return this.handleOAuthCallback(request, res);
   }
 
-  private async handleOAuthCallback(
-    request: FastifyRequest,
-    res: FastifyReply,
-  ) {
-    const token = await this.authService.generateAccessToken(request.user!);
-
+  private handleOAuthCallback(request: FastifyRequest, res: FastifyReply) {
     // vertex-web and vertex-api are on different domains (Vercel vs Render),
     // so a cookie set here would be scoped to this API's own domain and the
     // frontend's cookies() calls could never see it — no amount of polling
     // bridges that gap. Redirecting the popup to the frontend's own callback
     // route instead lets vertex-web set the cookie itself, on its own
     // domain, via a Server Action.
+    //
+    // The redirect carries a short-lived, single-use exchange code — never
+    // the real access token — since a URL can end up in browser history,
+    // Referer headers, or a proxy's access log. The frontend trades this
+    // code for the real token server-to-server via POST /auth/exchange,
+    // immediately after which the code stops working.
+    const code = this.authService.createOAuthExchangeCode(request.user!);
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
 
     return res.redirect(
-      `${frontendUrl}/auth/callback?token=${encodeURIComponent(token)}`,
+      `${frontendUrl}/auth/callback?code=${encodeURIComponent(code)}`,
       HttpStatus.FOUND,
     );
   }
