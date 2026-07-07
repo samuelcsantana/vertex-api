@@ -3,10 +3,7 @@ import { TestingModule } from '@nestjs/testing';
 import { like } from 'drizzle-orm';
 import request from 'supertest';
 import { createTestApp } from './utils/create-test-app';
-import {
-  createAdminUser,
-  createAuthenticatedUser,
-} from './utils/auth-helpers';
+import { createAdminUser, createAuthenticatedUser } from './utils/auth-helpers';
 import { DatabaseService } from '../src/database/database.service';
 import { posts, users } from '../src/database/schema';
 

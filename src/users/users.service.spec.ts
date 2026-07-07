@@ -33,11 +33,11 @@ describe('UsersService', () => {
       .mockReturnValue({ returning: txDeleteUserReturning });
 
     let deleteCallCount = 0;
-    const txDelete = jest.fn().mockImplementation(() => {
+    const txDelete = jest.fn().mockImplementation((): { where: jest.Mock } => {
       deleteCallCount += 1;
       // First delete() call in remove() targets comments, second targets users.
       return deleteCallCount === 1
-        ? txDeleteComments()
+        ? (txDeleteComments() as { where: jest.Mock })
         : { where: txDeleteUserWhere };
     });
 
@@ -83,9 +83,9 @@ describe('UsersService', () => {
     it('rejects banning your own account', async () => {
       const { service } = createService({});
 
-      await expect(
-        service.setBanned('u1', true, 'u1'),
-      ).rejects.toThrow(BadRequestException);
+      await expect(service.setBanned('u1', true, 'u1')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('updates isBanned for another user', async () => {
