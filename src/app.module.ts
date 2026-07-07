@@ -11,6 +11,7 @@ import { ProjectsModule } from './projects/projects.module';
 import { TopicsModule } from './topics/topics.module';
 import { CommentsModule } from './comments/comments.module';
 import { AboutModule } from './about/about.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { AboutModule } from './about/about.module';
     TopicsModule,
     CommentsModule,
     AboutModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [
