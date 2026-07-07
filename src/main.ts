@@ -12,7 +12,12 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter(),
+    // trustProxy: without it, Fastify reads the raw socket address as the
+    // client IP — behind Render's own reverse proxy, that's Render's proxy
+    // IP for every single request, not the real visitor's. Per-IP rate
+    // limiting would then bucket all traffic together instead of actually
+    // distinguishing abusive clients.
+    new FastifyAdapter({ trustProxy: true }),
   );
 
   // Same env var (and fallback) the OAuth callback redirect uses, so there's

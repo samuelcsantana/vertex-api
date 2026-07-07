@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ApiCookieAuth, ApiOperation } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
@@ -33,7 +34,12 @@ const LINK_COOKIE_MAX_AGE_SECONDS = 5 * 60;
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  // Stricter than the global default (100/60s): both are direct credential-
+  // guessing/account-spam targets, so brute-forcing them needs its own,
+  // much tighter budget rather than sharing the same allowance as ordinary
+  // read traffic like GET /posts.
   @Post('register')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   async register(
     @Body(new ZodValidationPipe(registerSchema)) registerDto: RegisterDto,
   ) {
@@ -42,6 +48,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   async login(
     @Body(new ZodValidationPipe(loginSchema)) loginDto: LoginDto,
     @Res({ passthrough: true }) res: FastifyReply,
