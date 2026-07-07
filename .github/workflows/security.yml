@@ -1,0 +1,36 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # New advisories can land for dependencies already pinned in the
+    # lockfile, with no code change of ours to trigger push/PR — catch
+    # those on a weekly cadence too.
+    - cron: "0 6 * * 1"
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # moderate-and-below findings here are unfixable transitive noise in
+      # build tooling (esbuild-kit nested inside drizzle-kit) with no
+      # non-breaking upgrade path — high/critical is the threshold that's
+      # both meaningful and actionable.
+      - name: Audit dependencies
+        run: npm audit --audit-level=high

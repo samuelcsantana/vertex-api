@@ -1,98 +1,77 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# vertex-api
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+[![CI](https://github.com/samuelcsantana/vertex-api/actions/workflows/ci.yml/badge.svg)](https://github.com/samuelcsantana/vertex-api/actions/workflows/ci.yml)
+[![Tests](https://github.com/samuelcsantana/vertex-api/actions/workflows/tests.yml/badge.svg)](https://github.com/samuelcsantana/vertex-api/actions/workflows/tests.yml)
+[![Security](https://github.com/samuelcsantana/vertex-api/actions/workflows/security.yml/badge.svg)](https://github.com/samuelcsantana/vertex-api/actions/workflows/security.yml)
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+The NestJS backend for **[samuel.dev](https://vertex-web-zeta.vercel.app)**, a personal engineering blog and technical portfolio. Serves posts, topics, comments, and auth to **[vertex-web](https://github.com/samuelcsantana/vertex-web)**, the Next.js frontend, over a REST API — deployed on a different domain (Render vs. Vercel), which shapes a few of the decisions below.
 
-## Description
+## Highlights
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+- **NestJS on Fastify**, not the default Express adapter — `@fastify/helmet` and `@fastify/cookie` sit directly on it.
+- **Drizzle ORM over Postgres**, prepared statements by default (no hand-built SQL strings, so no injection surface from user text).
+- **JWT sessions in an `HttpOnly` cookie**, verified — and the user re-checked for a ban flag — on every guarded request, not just at issuance.
+- **Google/GitHub OAuth via the Token Callback Pattern.** This API can't set the session cookie directly on OAuth callback: it and vertex-web live on different domains, so a cookie set here would be scoped to *this* domain, invisible to the frontend's own `cookies()` calls. Instead, the callback mints a random, single-use exchange code (60s TTL, in-memory) and redirects the popup to the frontend with the code — never the real token — in the URL. The frontend trades it for the real token via `POST /auth/exchange`, which deletes the code on first lookup regardless of validity, so a captured code can't be replayed even within its short window.
+- **Write access is admin-only, everywhere.** Every `POST`/`PATCH`/`DELETE` across posts, topics, about-page content, and uploads requires `JwtAuthGuard` + `AdminGuard`. Comments are the one exception by design (any logged-in visitor can post one) — but deleting one still checks `isOwner || isAdmin` in the service layer, not just "is logged in."
+- **Rate limited**, globally and per-route. 100 req/IP/60s by default (`@nestjs/throttler`, registered as `APP_GUARD`); `/auth/login` and `/auth/register` get a much tighter 5/60s, since both are direct brute-force/spam targets. `trustProxy` is enabled on the Fastify adapter so this reads the real client IP behind Render's reverse proxy instead of collapsing all traffic into one shared bucket.
 
-## Project setup
+## Tech stack
 
-```bash
-$ npm install
-```
+- [NestJS](https://nestjs.com) on `@nestjs/platform-fastify`
+- [Drizzle ORM](https://orm.drizzle.team) + PostgreSQL
+- Passport (Google OAuth2, GitHub, JWT strategies)
+- Zod for request validation
+- AWS S3 (presigned uploads for post cover images)
+- Swagger/OpenAPI, served at `/docs`
 
-## Compile and run the project
+## Getting started
 
-```bash
-# development
-$ npm run start
+### Prerequisites
 
-# watch mode
-$ npm run start:dev
+- Node 20+
+- Docker (for local Postgres) — or any reachable Postgres instance
 
-# production mode
-$ npm run start:prod
-```
-
-## Run tests
+### Setup
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+npm install
+cp .env.example .env       # fill in the values you need — see below
+docker compose up -d       # starts local Postgres on :5432
+npm run db:push            # applies the Drizzle schema
+npm run db:seed            # seeds default topics + About content
+npm run start:dev
 ```
 
-## Deployment
+The API listens on `:3333` by default. Swagger UI is at `http://localhost:3333/docs`.
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### Other scripts
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+npm run build       # production build
+npm run lint         # eslint --fix
+npm test             # unit tests (jest)
+npm run test:e2e     # e2e tests
+npm run test:cov     # coverage report
+npm run db:generate  # generate a new Drizzle migration from schema changes
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Environment variables
 
-## Resources
+See [`.env.example`](./.env.example) for the full, documented list. The ones most worth calling out:
 
-Check out a few resources that may come in handy when working with NestJS:
+| Variable | Purpose |
+| --- | --- |
+| `FRONTEND_URL` | vertex-web's own origin. Drives both CORS (`main.ts`) and the OAuth callback redirect target — one source of truth instead of two values that could drift apart. |
+| `DATABASE_URL`, `JWT_SECRET`, `COOKIE_SECRET` | Required at boot; the app throws immediately if `COOKIE_SECRET` is missing. |
+| `GOOGLE_CALLBACK_URL`, `GITHUB_CALLBACK_URL` | Registered with each provider's OAuth app config — these still point at *this* API's own domain even with the Token Callback Pattern in place, since only what happens *after* the callback succeeds changed. |
+| `ADMIN_EMAIL` | The one address that gets `role: 'admin'` on first login/registration — everyone else is `role: 'user'`. |
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+## Architecture notes
 
-## Support
+- **Auth guards compose, they don't duplicate logic.** `JwtAuthGuard` verifies the token and populates `request.user`; `AdminGuard` just reads `request.user.role` — it always runs after `JwtAuthGuard` in the guard chain, never standalone.
+- **OAuth exchange codes are intentionally in-memory, not DB- or Redis-backed.** A code is only ever meant to survive a single redirect hop (a few seconds, 60s TTL as a hard ceiling) on a single-instance deployment — durability across a process restart isn't a real requirement here, and the one failure mode (a restart mid-flow) just means that one login attempt fails and the visitor retries.
+- **Passport strategies own their own callback URL fallback** (`GOOGLE_CALLBACK_URL ?? 'http://localhost:3333/auth/google/callback'`), so local dev works without any `.env` file at all.
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+## Related repository
 
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- [vertex-web](https://github.com/samuelcsantana/vertex-web) — the Next.js frontend this API serves.
