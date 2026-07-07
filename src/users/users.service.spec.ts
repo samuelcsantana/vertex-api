@@ -153,4 +153,40 @@ describe('UsersService', () => {
       );
     });
   });
+
+  describe('removeSelf', () => {
+    it('allows a user to delete their own account (no self-block, unlike remove)', async () => {
+      const txDeleteUserReturning = jest
+        .fn()
+        .mockResolvedValue([{ id: 'u1', email: 'u1@example.com' }]);
+      const { service, txDeleteCommentsWhere } = createService({
+        txDeleteUserReturning,
+      });
+
+      const result = await service.removeSelf('u1');
+
+      expect(txDeleteCommentsWhere).toHaveBeenCalled();
+      expect(result).toEqual({ id: 'u1', email: 'u1@example.com' });
+    });
+
+    it('still refuses to delete a user who has authored posts', async () => {
+      const txFindFirstPost = jest
+        .fn()
+        .mockResolvedValue({ id: 'post-1', authorId: 'u1' });
+      const { service } = createService({ txFindFirstPost });
+
+      await expect(service.removeSelf('u1')).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('throws NotFoundException when the user does not exist', async () => {
+      const txDeleteUserReturning = jest.fn().mockResolvedValue([]);
+      const { service } = createService({ txDeleteUserReturning });
+
+      await expect(service.removeSelf('missing')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
 });

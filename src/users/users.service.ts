@@ -63,9 +63,24 @@ export class UsersService {
 
   async remove(id: string, requestingUserId: string) {
     if (id === requestingUserId) {
-      throw new BadRequestException('You cannot delete your own account');
+      throw new BadRequestException(
+        'You cannot delete your own account from the admin panel — use your profile page instead',
+      );
     }
 
+    return this.deleteUserAndCascadeComments(id);
+  }
+
+  // Anyone gets to delete their own account — that's the point, so there's
+  // no requestingUserId self-check here the way remove() has one. Still
+  // goes through the same authored-posts guard and comment cascade: the
+  // rule that a user's identity can't be reassigned/blocked-away is about
+  // the platform's content integrity, not about who is doing the deleting.
+  async removeSelf(id: string) {
+    return this.deleteUserAndCascadeComments(id);
+  }
+
+  private async deleteUserAndCascadeComments(id: string) {
     return this.databaseService.db.transaction(async (tx) => {
       // Posts require deliberate reassignment/deletion by an admin first —
       // silently cascading someone's published articles away as a side

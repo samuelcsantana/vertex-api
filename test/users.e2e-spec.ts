@@ -238,4 +238,59 @@ describe('Users (e2e)', () => {
       expect(response.status).toBe(404);
     });
   });
+
+  describe('DELETE /users/me', () => {
+    it('rejects an unauthenticated request', async () => {
+      const response = await request(app.getHttpServer()).delete('/users/me');
+
+      expect(response.status).toBe(401);
+    });
+
+    it('allows a non-admin user to delete their own account', async () => {
+      const { userId, cookie } = await createAuthenticatedUser(
+        app,
+        moduleFixture,
+        'self-service-delete',
+      );
+
+      const response = await request(app.getHttpServer())
+        .delete('/users/me')
+        .set('Cookie', cookie);
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({ id: userId });
+
+      // The account is really gone, not just banned/hidden.
+      const listResponse = await request(app.getHttpServer())
+        .get('/users')
+        .set('Cookie', adminCookie);
+      expect(
+        (listResponse.body as { id: string }[]).some((u) => u.id === userId),
+      ).toBe(false);
+    });
+
+    it('rejects self-deletion for a user who has authored posts', async () => {
+      const { cookie: authorCookie } = await createAdminUser(
+        app,
+        moduleFixture,
+        'self-delete-author',
+      );
+
+      await request(app.getHttpServer())
+        .post('/posts')
+        .set('Cookie', authorCookie)
+        .send({
+          title: 'E2E Users Self-Delete Post',
+          slug: uniqueSlug('self-delete-post'),
+          content: 'Body',
+          isPublished: true,
+        });
+
+      const response = await request(app.getHttpServer())
+        .delete('/users/me')
+        .set('Cookie', authorCookie);
+
+      expect(response.status).toBe(400);
+    });
+  });
 });
