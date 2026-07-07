@@ -55,6 +55,19 @@ npm run test:cov     # coverage report
 npm run db:generate  # generate a new Drizzle migration from schema changes
 ```
 
+## Testing
+
+Two layers:
+
+- **Unit (Jest, wired into CI as `tests.yml`).** Mocked dependencies, no real Postgres needed — the exchange-code TTL/single-use logic in `AuthService` (including fake-timer tests for the 60s boundary), `AdminGuard`'s role check, `CommentsService.remove`'s `isOwner || isAdmin` rule, and `slugify`. As with vertex-web, this deliberately covers a handful of the highest-risk files completely rather than the whole codebase shallowly.
+- **E2E (Jest + Supertest, `test/*.e2e-spec.ts`, not wired into CI).** Runs the real app against a real Postgres (`docker compose up -d` first) — registration, login, the `/auth/exchange` endpoint, unauthenticated-request rejection on protected routes, and the rate limiter actually returning 429 on the 6th request within its window. `test/utils/create-test-app.ts` is the one bootstrap helper all of these share; it exists because `Test.createTestingModule().createNestApplication()` defaults to an Express adapter that isn't even installed here (**this project's default e2e boilerplate never actually ran** — `@nestjs/platform-express` is missing, `@fastify/cookie` isn't registered outside `main.ts`'s own imperative bootstrap, and `uuid`'s ESM build isn't in Jest's default transform allowlist; all three needed fixing before any e2e test, including the original `app.e2e-spec.ts`, could pass). `auth.e2e-spec.ts` cleans up the throwaway users it creates in its own `afterAll` rather than letting them accumulate in whatever Postgres `DATABASE_URL` points at.
+
+```bash
+npm test              # unit tests
+npm run test:cov      # unit tests with a coverage report
+npm run test:e2e      # e2e — needs Postgres up and every OAuth env var set (the strategies throw in their constructor otherwise)
+```
+
 ## Environment variables
 
 See [`.env.example`](./.env.example) for the full, documented list. The ones most worth calling out:
