@@ -87,6 +87,31 @@ describe('Auth (e2e)', () => {
 
       expect(response.status).toBe(401);
     });
+
+    it('the cookie it sets actually authenticates a follow-up request', async () => {
+      const email = uniqueEmail();
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({ email, password: 'testpass123' });
+      const loginResponse = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({ email, password: 'testpass123' });
+      const setCookie = loginResponse.headers['set-cookie'] as
+        string[] | string;
+      const cookies: string[] = Array.isArray(setCookie)
+        ? setCookie
+        : [setCookie];
+      const accessTokenCookie = cookies.find((c) =>
+        c.startsWith('access_token='),
+      )!;
+
+      const profileResponse = await request(app.getHttpServer())
+        .get('/auth/profile')
+        .set('Cookie', accessTokenCookie.split(';')[0]);
+
+      expect(profileResponse.status).toBe(200);
+      expect(profileResponse.body).toMatchObject({ email });
+    });
   });
 
   describe('POST /auth/exchange', () => {
