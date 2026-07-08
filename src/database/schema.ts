@@ -54,6 +54,10 @@ export const posts = pgTable('posts', {
   allowComments: boolean('allow_comments').default(true).notNull(),
   coverUrl: text('cover_url'),
   coverAlt: text('cover_alt'),
+  // Manually-written SEO snippet for search results — falls back to an
+  // auto-generated excerpt of `content` when left blank (see
+  // blog/[slug]/page.tsx's generateMetadata on the frontend).
+  metaDescription: text('meta_description'),
   authorId: uuid('author_id')
     .notNull()
     .references(() => users.id),
