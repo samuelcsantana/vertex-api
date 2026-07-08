@@ -135,6 +135,40 @@ describe('Posts (e2e)', () => {
       );
       expect(afterDeleteResponse.status).toBe(404);
     });
+
+    it('round-trips coverUrl and coverAlt through create and update', async () => {
+      const { cookie } = await createAdminUser(app, moduleFixture, 'poster');
+      const slug = uniqueSlug('cover-alt');
+
+      const createResponse = await request(app.getHttpServer())
+        .post('/posts')
+        .set('Cookie', cookie)
+        .send({
+          title: 'E2E Post With Cover',
+          slug,
+          content: 'Body',
+          isPublished: true,
+          coverUrl: 'https://example.com/cover.jpg',
+          coverAlt: 'A diagram of the request flow',
+        });
+
+      expect(createResponse.status).toBe(201);
+      expect(createResponse.body).toMatchObject({
+        coverUrl: 'https://example.com/cover.jpg',
+        coverAlt: 'A diagram of the request flow',
+      });
+      const postId = (createResponse.body as { id: string }).id;
+
+      const updateResponse = await request(app.getHttpServer())
+        .patch(`/posts/${postId}`)
+        .set('Cookie', cookie)
+        .send({ coverAlt: 'Updated description' });
+
+      expect(updateResponse.status).toBe(200);
+      expect((updateResponse.body as { coverAlt: string }).coverAlt).toBe(
+        'Updated description',
+      );
+    });
   });
 
   describe('GET /dashboard/posts', () => {

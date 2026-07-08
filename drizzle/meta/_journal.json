@@ -57,6 +57,13 @@
       "when": 1783366316436,
       "tag": "0007_large_mephistopheles",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1783468915954,
+      "tag": "0008_mixed_ghost_rider",
+      "breakpoints": true
     }
   ]
 }
