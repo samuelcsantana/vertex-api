@@ -6,11 +6,12 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
-import { ApiCookieAuth, ApiTags } from '@nestjs/swagger';
+import { ApiCookieAuth, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from '../auth/guards/admin.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
@@ -31,8 +32,17 @@ export class PostsController {
   }
 
   @Get(':slug')
-  async findBySlug(@Param('slug') slug: string) {
-    return this.postsService.findPublishedBySlug(slug);
+  @ApiQuery({
+    name: 'locale',
+    required: false,
+    description:
+      'pt (default), en, or es — resolves that locale\'s own slug column first, falling back to the default "slug" when the post has no translated slug of its own.',
+  })
+  async findBySlug(
+    @Param('slug') slug: string,
+    @Query('locale') locale?: string,
+  ) {
+    return this.postsService.findPublishedBySlug(slug, locale);
   }
 
   @Post()

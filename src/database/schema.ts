@@ -40,9 +40,16 @@ export const posts = pgTable('posts', {
   id: uuid('id').primaryKey().defaultRandom(),
   title: varchar('title').notNull(),
   titleEn: text('title_en'),
+  titleEs: text('title_es'),
+  // slug is the pt (default-locale) slug and stays required — it's also
+  // the fallback URL for en/es when a post has no translated slug of its
+  // own yet (see PostsService.findPublishedBySlug).
   slug: varchar('slug').notNull().unique(),
+  slugEn: varchar('slug_en').unique(),
+  slugEs: varchar('slug_es').unique(),
   content: text('content').notNull(),
   contentEn: text('content_en'),
+  contentEs: text('content_es'),
   isPublished: boolean('is_published').default(false).notNull(),
   allowComments: boolean('allow_comments').default(true).notNull(),
   coverUrl: text('cover_url'),

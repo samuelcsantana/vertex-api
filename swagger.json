@@ -200,6 +200,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "locale",
+            "required": false,
+            "in": "query",
+            "description": "pt (default), en, or es — resolves that locale's own slug column first, falling back to the default \"slug\" when the post has no translated slug of its own.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
