@@ -71,6 +71,13 @@
       "when": 1783535477566,
       "tag": "0009_flaky_kulan_gath",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1783542469286,
+      "tag": "0010_melted_wind_dancer",
+      "breakpoints": true
     }
   ]
 }
