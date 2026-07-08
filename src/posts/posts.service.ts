@@ -1,5 +1,10 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { and, desc, eq } from 'drizzle-orm';
+import {
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import { UploadsService } from '../uploads/uploads.service';
 import { posts, postsToTopics, topics } from '../database/schema';
@@ -27,6 +32,35 @@ function withFlattenedTopics<
   return { ...rest, topics: postTopics.map((entry) => entry.topic) };
 }
 
+// Field name shown to the admin (matching CreatePostDto's keys) for each
+// unique constraint the "postgres" driver (porsager/postgres) can report
+// on posts.create/update. Drizzle wraps the driver's PostgresError in its
+// own error class, so the actual #code/#constraint_name aren't on the
+// error it throws directly — they're one level down, on error.cause.
+const SLUG_CONSTRAINT_FIELDS: Record<string, string> = {
+  posts_slug_unique: 'slug',
+  posts_slug_en_unique: 'slugEn',
+  posts_slug_es_unique: 'slugEs',
+};
+
+function rethrowFriendlySlugConflict(error: unknown): never {
+  const pgError = (error instanceof Error ? error.cause : undefined) as {
+    code?: string;
+    constraint_name?: string;
+  };
+
+  if (pgError?.code === '23505' && pgError.constraint_name) {
+    const field = SLUG_CONSTRAINT_FIELDS[pgError.constraint_name];
+    if (field) {
+      throw new ConflictException(
+        `The "${field}" slug is already in use by another post.`,
+      );
+    }
+  }
+
+  throw error;
+}
+
 @Injectable()
 export class PostsService {
   private readonly logger = new Logger(PostsService.name);
@@ -39,27 +73,30 @@ export class PostsService {
   async create(createPostDto: CreatePostDto, authorId: string) {
     const { topicIds, ...postData } = createPostDto;
 
-    return this.databaseService.db.transaction(async (tx) => {
-      const [createdPost] = await tx
-        .insert(posts)
-        .values({ ...postData, authorId })
-        .returning();
+    return this.databaseService.db
+      .transaction(async (tx) => {
+        const [createdPost] = await tx
+          .insert(posts)
+          .values({ ...postData, authorId })
+          .returning();
 
-      if (topicIds && topicIds.length > 0) {
-        await tx
-          .insert(postsToTopics)
-          .values(
-            topicIds.map((topicId) => ({ postId: createdPost.id, topicId })),
+        if (topicIds && topicIds.length > 0) {
+          await tx.insert(postsToTopics).values(
+            topicIds.map((topicId) => ({
+              postId: createdPost.id,
+              topicId,
+            })),
           );
-      }
+        }
 
-      const postWithTopics = await tx.query.posts.findFirst({
-        where: eq(posts.id, createdPost.id),
-        ...postWithTopicsQuery,
-      });
+        const postWithTopics = await tx.query.posts.findFirst({
+          where: eq(posts.id, createdPost.id),
+          ...postWithTopicsQuery,
+        });
 
-      return withFlattenedTopics(postWithTopics!);
-    });
+        return withFlattenedTopics(postWithTopics!);
+      })
+      .catch(rethrowFriendlySlugConflict);
   }
 
   async findAllPublished() {
@@ -81,9 +118,27 @@ export class PostsService {
     return results.map(withFlattenedTopics);
   }
 
-  async findPublishedBySlug(slug: string) {
+  // A post without its own slugEn/slugEs is reached under the default
+  // (pt) slug for that locale too — same fallback semantics as
+  // title/content already have (see localized-content.ts on the
+  // frontend). "pt" and any unrecognized locale just match the default
+  // slug column directly.
+  async findPublishedBySlug(slug: string, locale?: string) {
+    const localeSlugMatch =
+      locale === 'en'
+        ? or(
+            eq(posts.slugEn, slug),
+            and(isNull(posts.slugEn), eq(posts.slug, slug)),
+          )
+        : locale === 'es'
+          ? or(
+              eq(posts.slugEs, slug),
+              and(isNull(posts.slugEs), eq(posts.slug, slug)),
+            )
+          : eq(posts.slug, slug);
+
     const post = await this.databaseService.db.query.posts.findFirst({
-      where: and(eq(posts.slug, slug), eq(posts.isPublished, true)),
+      where: and(localeSlugMatch, eq(posts.isPublished, true)),
       ...postWithTopicsQuery,
     });
 
@@ -97,34 +152,36 @@ export class PostsService {
   async update(id: string, updatePostDto: UpdatePostDto) {
     const { topicIds, ...postData } = updatePostDto;
 
-    return this.databaseService.db.transaction(async (tx) => {
-      const [updatedPost] = await tx
-        .update(posts)
-        .set({ ...postData, updatedAt: new Date() })
-        .where(eq(posts.id, id))
-        .returning();
+    return this.databaseService.db
+      .transaction(async (tx) => {
+        const [updatedPost] = await tx
+          .update(posts)
+          .set({ ...postData, updatedAt: new Date() })
+          .where(eq(posts.id, id))
+          .returning();
 
-      if (!updatedPost) {
-        throw new NotFoundException('Post not found');
-      }
-
-      if (topicIds) {
-        await tx.delete(postsToTopics).where(eq(postsToTopics.postId, id));
-
-        if (topicIds.length > 0) {
-          await tx
-            .insert(postsToTopics)
-            .values(topicIds.map((topicId) => ({ postId: id, topicId })));
+        if (!updatedPost) {
+          throw new NotFoundException('Post not found');
         }
-      }
 
-      const postWithTopics = await tx.query.posts.findFirst({
-        where: eq(posts.id, id),
-        ...postWithTopicsQuery,
-      });
+        if (topicIds) {
+          await tx.delete(postsToTopics).where(eq(postsToTopics.postId, id));
 
-      return withFlattenedTopics(postWithTopics!);
-    });
+          if (topicIds.length > 0) {
+            await tx
+              .insert(postsToTopics)
+              .values(topicIds.map((topicId) => ({ postId: id, topicId })));
+          }
+        }
+
+        const postWithTopics = await tx.query.posts.findFirst({
+          where: eq(posts.id, id),
+          ...postWithTopicsQuery,
+        });
+
+        return withFlattenedTopics(postWithTopics!);
+      })
+      .catch(rethrowFriendlySlugConflict);
   }
 
   async remove(id: string) {

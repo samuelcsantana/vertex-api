@@ -1,7 +1,9 @@
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
+import { and, eq, isNull, or } from 'drizzle-orm';
 import { PostsService } from './posts.service';
 import { DatabaseService } from '../database/database.service';
 import { UploadsService } from '../uploads/uploads.service';
+import { posts } from '../database/schema';
 
 describe('PostsService', () => {
   const rawPostWithTopics = {
@@ -34,6 +36,9 @@ describe('PostsService', () => {
     deleteReturning?: jest.Mock;
     extractBucketKeysFromContent?: jest.Mock;
     deleteFiles?: jest.Mock;
+    // Simulates the "postgres" driver rejecting mid-transaction (e.g. a
+    // unique constraint violation) instead of resolving normally.
+    transactionRejectsWith?: unknown;
   }) {
     const txFindFirst =
       options.txFindFirst ?? jest.fn().mockResolvedValue(rawPostWithTopics);
@@ -65,9 +70,12 @@ describe('PostsService', () => {
       query: { posts: { findFirst: txFindFirst } },
     };
 
-    const transaction = jest
-      .fn()
-      .mockImplementation((cb: (tx: unknown) => unknown) => cb(tx));
+    const transaction =
+      'transactionRejectsWith' in options
+        ? jest.fn().mockRejectedValue(options.transactionRejectsWith)
+        : jest
+            .fn()
+            .mockImplementation((cb: (tx: unknown) => unknown) => cb(tx));
 
     const findMany = options.findMany ?? jest.fn().mockResolvedValue([]);
     const findFirst =
@@ -144,6 +152,52 @@ describe('PostsService', () => {
       // empty topicIds array — only the post insert itself does.
       expect(true).toBe(true);
     });
+
+    it.each([
+      ['posts_slug_unique', 'slug'],
+      ['posts_slug_en_unique', 'slugEn'],
+      ['posts_slug_es_unique', 'slugEs'],
+    ])(
+      'turns a %s violation into a friendly ConflictException naming "%s"',
+      async (constraint_name, field) => {
+        // Drizzle wraps the driver's PostgresError in its own error class —
+        // the real #code/#constraint_name live on .cause, not the thrown
+        // error itself (mirrors what "postgres"/porsager actually throws).
+        const drizzleError = new Error('insert failed');
+        (drizzleError as { cause?: unknown }).cause = {
+          code: '23505',
+          constraint_name,
+        };
+        const { service } = createService({
+          transactionRejectsWith: drizzleError,
+        });
+
+        await expect(
+          service.create(
+            { title: 'Hello', slug: 'hello', content: 'Body' },
+            'author-1',
+          ),
+        ).rejects.toThrow(ConflictException);
+        await expect(
+          service.create(
+            { title: 'Hello', slug: 'hello', content: 'Body' },
+            'author-1',
+          ),
+        ).rejects.toThrow(new RegExp(field));
+      },
+    );
+
+    it('rethrows unrelated errors unchanged', async () => {
+      const dbError = new Error('connection lost');
+      const { service } = createService({ transactionRejectsWith: dbError });
+
+      await expect(
+        service.create(
+          { title: 'Hello', slug: 'hello', content: 'Body' },
+          'author-1',
+        ),
+      ).rejects.toThrow(dbError);
+    });
   });
 
   describe('findAllPublished', () => {
@@ -184,6 +238,54 @@ describe('PostsService', () => {
 
       await expect(service.findPublishedBySlug('missing')).rejects.toThrow(
         NotFoundException,
+      );
+    });
+
+    it('matches only the default slug column for "pt" or no locale', async () => {
+      const findFirst = jest.fn().mockResolvedValue(rawPostWithTopics);
+      const { service } = createService({ findFirst });
+
+      await service.findPublishedBySlug('hello');
+
+      const [{ where }] = findFirst.mock.calls[0] as [{ where: unknown }];
+      expect(where).toEqual(
+        and(eq(posts.slug, 'hello'), eq(posts.isPublished, true)),
+      );
+    });
+
+    it('falls back to the default slug when slugEn is null, for locale "en"', async () => {
+      const findFirst = jest.fn().mockResolvedValue(rawPostWithTopics);
+      const { service } = createService({ findFirst });
+
+      await service.findPublishedBySlug('hello', 'en');
+
+      const [{ where }] = findFirst.mock.calls[0] as [{ where: unknown }];
+      expect(where).toEqual(
+        and(
+          or(
+            eq(posts.slugEn, 'hello'),
+            and(isNull(posts.slugEn), eq(posts.slug, 'hello')),
+          ),
+          eq(posts.isPublished, true),
+        ),
+      );
+    });
+
+    it('falls back to the default slug when slugEs is null, for locale "es"', async () => {
+      const findFirst = jest.fn().mockResolvedValue(rawPostWithTopics);
+      const { service } = createService({ findFirst });
+
+      await service.findPublishedBySlug('hello', 'es');
+
+      const [{ where }] = findFirst.mock.calls[0] as [{ where: unknown }];
+      expect(where).toEqual(
+        and(
+          or(
+            eq(posts.slugEs, 'hello'),
+            and(isNull(posts.slugEs), eq(posts.slug, 'hello')),
+          ),
+          eq(posts.isPublished, true),
+        ),
       );
     });
   });

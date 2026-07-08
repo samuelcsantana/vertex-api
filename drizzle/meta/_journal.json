@@ -64,6 +64,13 @@
       "when": 1783468915954,
       "tag": "0008_mixed_ghost_rider",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1783535477566,
+      "tag": "0009_flaky_kulan_gath",
+      "breakpoints": true
     }
   ]
 }
