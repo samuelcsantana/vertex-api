@@ -12,6 +12,9 @@ export const createPostSchema = z.object({
   isPublished: z.boolean().optional(),
   allowComments: z.boolean().optional(),
   coverUrl: z.string().url().optional(),
+  // Only meaningful once coverUrl is set, but not required even then — an
+  // admin can still legitimately mark a cover as purely decorative.
+  coverAlt: z.string().optional(),
   topicIds: z.array(z.string().uuid()).optional(),
 });
 
