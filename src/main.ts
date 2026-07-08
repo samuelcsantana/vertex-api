@@ -9,6 +9,32 @@ import cookie from '@fastify/cookie';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 
+// The browser sends whichever exact host the visitor is on as the Origin
+// header — apex (samuelsantana.dev) and www (www.samuelsantana.dev) are
+// different origins even though they're "the same site" to a human, and
+// even though vertex-web's own routing/DNS may only ever surface one of
+// them. A single-origin CORS allowlist that only matches whichever variant
+// FRONTEND_URL happens to be set to silently breaks every browser fetch
+// from the other variant (production incident: FRONTEND_URL was the apex
+// domain, but the deployed frontend was reachable — and being visited — at
+// the www subdomain, so every client-side call to this API was blocked by
+// CORS with no server-side error at all). Allow both variants of whatever
+// host FRONTEND_URL names, so this can't depend on which one happens to be
+// configured.
+function withWwwVariant(url: string): string[] {
+  try {
+    const parsed = new URL(url);
+    const altHostname = parsed.hostname.startsWith('www.')
+      ? parsed.hostname.slice(4)
+      : `www.${parsed.hostname}`;
+    const alt = new URL(url);
+    alt.hostname = altHostname;
+    return [parsed.origin, alt.origin];
+  } catch {
+    return [url];
+  }
+}
+
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
@@ -26,7 +52,7 @@ async function bootstrap() {
   const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
 
   app.enableCors({
-    origin: [frontendUrl],
+    origin: withWwwVariant(frontendUrl),
     credentials: true,
   });
 
