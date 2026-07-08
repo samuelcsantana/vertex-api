@@ -78,6 +78,13 @@
       "when": 1783542469286,
       "tag": "0010_melted_wind_dancer",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1783550937155,
+      "tag": "0011_huge_cassandra_nova",
+      "breakpoints": true
     }
   ]
 }

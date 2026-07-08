@@ -32,11 +32,15 @@ export const createPostSchema = z.object({
   // Only meaningful once coverUrl is set, but not required even then — an
   // admin can still legitimately mark a cover as purely decorative.
   coverAlt: z.string().optional(),
-  // Manually-written search-result snippet — falls back to an auto-
-  // generated excerpt of `content` when left blank (frontend concern,
-  // see blog/[slug]/page.tsx's generateMetadata). 160 chars matches
-  // Google's typical meta description truncation point.
+  // Manually-written search-result snippet, per locale — a locale without
+  // its own falls back to an auto-generated excerpt of that locale's own
+  // content (frontend concern, see localized-content.ts's
+  // getLocalizedMetaDescription and blog/[slug]/page.tsx's
+  // generateMetadata). 160 chars matches Google's typical meta
+  // description truncation point.
   metaDescription: z.string().max(160).optional(),
+  metaDescriptionEn: z.string().max(160).optional(),
+  metaDescriptionEs: z.string().max(160).optional(),
   topicIds: z.array(z.string().uuid()).optional(),
 });
 

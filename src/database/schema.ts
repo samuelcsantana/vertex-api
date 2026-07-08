@@ -54,10 +54,15 @@ export const posts = pgTable('posts', {
   allowComments: boolean('allow_comments').default(true).notNull(),
   coverUrl: text('cover_url'),
   coverAlt: text('cover_alt'),
-  // Manually-written SEO snippet for search results — falls back to an
-  // auto-generated excerpt of `content` when left blank (see
+  // Manually-written SEO snippet for search results — per locale, same as
+  // title/content: a locale without its own override falls back to an
+  // auto-generated excerpt of that locale's own (possibly also-fallback)
+  // content, not to another locale's hand-written text (see
+  // localized-content.ts's getLocalizedMetaDescription and
   // blog/[slug]/page.tsx's generateMetadata on the frontend).
   metaDescription: text('meta_description'),
+  metaDescriptionEn: text('meta_description_en'),
+  metaDescriptionEs: text('meta_description_es'),
   authorId: uuid('author_id')
     .notNull()
     .references(() => users.id),
