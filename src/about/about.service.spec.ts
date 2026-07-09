@@ -99,5 +99,37 @@ describe('AboutService', () => {
       );
       expect(result).toEqual({ id: 'about-1', content: 'Updated content' });
     });
+
+    it('persists the optional en/es translations when provided', async () => {
+      const findFirst = jest
+        .fn()
+        .mockResolvedValue({ id: 'about-1', content: 'Old content' });
+      const updateReturning = jest.fn().mockResolvedValue([
+        {
+          id: 'about-1',
+          content: 'Conteúdo',
+          contentEn: 'Content',
+          contentEs: 'Contenido',
+        },
+      ]);
+      const { service, updateSet } = createService({
+        findFirst,
+        updateReturning,
+      });
+
+      await service.update({
+        content: 'Conteúdo',
+        contentEn: 'Content',
+        contentEs: 'Contenido',
+      });
+
+      expect(updateSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: 'Conteúdo',
+          contentEn: 'Content',
+          contentEs: 'Contenido',
+        }),
+      );
+    });
   });
 });

@@ -31,7 +31,7 @@ export class AboutService {
     if (!existing) {
       const [created] = await this.databaseService.db
         .insert(aboutContent)
-        .values({ content: updateAboutDto.content })
+        .values(updateAboutDto)
         .returning();
 
       return created;
@@ -39,7 +39,7 @@ export class AboutService {
 
     const [updated] = await this.databaseService.db
       .update(aboutContent)
-      .set({ content: updateAboutDto.content, updatedAt: new Date() })
+      .set({ ...updateAboutDto, updatedAt: new Date() })
       .where(eq(aboutContent.id, existing.id))
       .returning();
 

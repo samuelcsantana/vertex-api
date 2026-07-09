@@ -74,7 +74,12 @@ export const posts = pgTable('posts', {
 // About page — there is no list/CRUD concept here, just get/update.
 export const aboutContent = pgTable('about_content', {
   id: uuid('id').primaryKey().defaultRandom(),
+  // content is the pt (default-locale) text and stays required — en/es are
+  // optional translations that fall back to pt on the frontend, mirroring
+  // posts' content/content_en/content_es.
   content: text('content').notNull(),
+  contentEn: text('content_en'),
+  contentEs: text('content_es'),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
