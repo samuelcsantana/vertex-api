@@ -10,7 +10,8 @@ type PatchedFastifyReply = FastifyReply & {
 @Injectable()
 export class GoogleAuthGuard extends AuthGuard('google') {
   getResponse(context: ExecutionContext): FastifyReply {
-    const response = context.switchToHttp().getResponse<PatchedFastifyReply>();
+    const response =
+      context.switchToHttp().getResponse<PatchedFastifyReply>();
 
     if (typeof response.setHeader !== 'function') {
       response.setHeader = response.raw.setHeader.bind(response.raw);
