@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  ServiceUnavailableException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, Profile, VerifyCallback } from 'passport-google-oauth20';
 import { eq } from 'drizzle-orm';
@@ -10,6 +14,8 @@ import { JwtPayload, UserRole } from '../interfaces/jwt-payload.interface';
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
+  private readonly isConfigured: boolean;
+
   constructor(private readonly databaseService: DatabaseService) {
     const clientID = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
@@ -17,18 +23,31 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       process.env.GOOGLE_CALLBACK_URL ??
       'http://localhost:3333/auth/google/callback';
 
-    if (!clientID || !clientSecret) {
-      throw new Error(
-        'Missing required Google OAuth environment variables: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET',
-      );
-    }
-
+    // Passport demands credential-shaped options at super() time, but
+    // throwing here used to take the entire app down whenever the Google
+    // env vars were absent — which forced OAuth-less local dev and every
+    // e2e run to supply real-looking credentials just to boot. Construct
+    // with placeholders instead and fail per-request in authenticate()
+    // below: only the /auth/google routes become unavailable when
+    // unconfigured, not the application.
     super({
-      clientID,
-      clientSecret,
+      clientID: clientID ?? 'google-oauth-not-configured',
+      clientSecret: clientSecret ?? 'google-oauth-not-configured',
       callbackURL,
       scope: ['email', 'profile'],
     });
+
+    this.isConfigured = Boolean(clientID && clientSecret);
+  }
+
+  authenticate(...args: Parameters<Strategy['authenticate']>): void {
+    if (!this.isConfigured) {
+      throw new ServiceUnavailableException(
+        'Google OAuth is not configured on this server (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).',
+      );
+    }
+
+    super.authenticate(...args);
   }
 
   async validate(

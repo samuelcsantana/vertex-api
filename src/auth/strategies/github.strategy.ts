@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   InternalServerErrorException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
@@ -40,6 +41,8 @@ function isUniqueViolation(error: unknown): boolean {
 
 @Injectable()
 export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
+  private readonly isConfigured: boolean;
+
   constructor(private readonly databaseService: DatabaseService) {
     const clientID = process.env.GITHUB_CLIENT_ID;
     const clientSecret = process.env.GITHUB_CLIENT_SECRET;
@@ -47,19 +50,29 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
       process.env.GITHUB_CALLBACK_URL ??
       'http://localhost:3333/auth/github/callback';
 
-    if (!clientID || !clientSecret) {
-      throw new Error(
-        'Missing required GitHub OAuth environment variables: GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET',
-      );
-    }
-
+    // Same rationale as GoogleStrategy: constructing with placeholders and
+    // failing per-request in authenticate() keeps a missing GITHUB_* env
+    // from crashing the whole app at boot — only the /auth/github routes
+    // 503 when unconfigured.
     super({
-      clientID,
-      clientSecret,
+      clientID: clientID ?? 'github-oauth-not-configured',
+      clientSecret: clientSecret ?? 'github-oauth-not-configured',
       callbackURL,
       scope: ['user:email'],
       passReqToCallback: true,
     });
+
+    this.isConfigured = Boolean(clientID && clientSecret);
+  }
+
+  authenticate(...args: Parameters<Strategy['authenticate']>): void {
+    if (!this.isConfigured) {
+      throw new ServiceUnavailableException(
+        'GitHub OAuth is not configured on this server (GITHUB_CLIENT_ID / GITHUB_CLIENT_SECRET).',
+      );
+    }
+
+    super.authenticate(...args);
   }
 
   async validate(

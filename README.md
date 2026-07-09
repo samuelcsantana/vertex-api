@@ -66,7 +66,7 @@ Two layers:
 ```bash
 npm test              # unit tests
 npm run test:cov      # unit tests with a coverage report
-npm run test:e2e      # e2e — needs Postgres up and every OAuth env var set (the strategies throw in their constructor otherwise)
+npm run test:e2e      # e2e — needs Postgres up (OAuth env vars are optional: unconfigured strategies 503 their own routes instead of crashing boot)
 ```
 
 ## Environment variables
