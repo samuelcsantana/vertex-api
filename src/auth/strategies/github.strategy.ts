@@ -73,7 +73,7 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
 
     if (!githubId) {
       throw new BadRequestException(
-        'Não foi possível obter o identificador da conta do GitHub.',
+        'Could not retrieve the GitHub account identifier.',
       );
     }
 
@@ -144,7 +144,7 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
 
       if (!currentUser) {
         throw new UnauthorizedException(
-          'Usuário para vinculação não encontrado.',
+          'User to link the GitHub account to was not found.',
         );
       }
 
@@ -172,7 +172,7 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
         throw error;
       }
 
-      console.error('Erro ao vincular conta do GitHub:', error);
+      console.error('Failed to link GitHub account:', error);
       throw new InternalServerErrorException('Failed to link GitHub account');
     }
   }
@@ -226,7 +226,7 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
         throw error;
       }
 
-      console.error('Erro na estratégia do GitHub:', error);
+      console.error('GitHub strategy error:', error);
       throw new InternalServerErrorException(
         'Failed to authenticate with GitHub',
       );

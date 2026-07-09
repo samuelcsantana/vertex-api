@@ -107,9 +107,9 @@ describe('AboutService', () => {
       const updateReturning = jest.fn().mockResolvedValue([
         {
           id: 'about-1',
-          content: 'Conteúdo',
-          contentEn: 'Content',
-          contentEs: 'Contenido',
+          content: 'Portuguese content',
+          contentEn: 'English content',
+          contentEs: 'Spanish content',
         },
       ]);
       const { service, updateSet } = createService({
@@ -118,16 +118,16 @@ describe('AboutService', () => {
       });
 
       await service.update({
-        content: 'Conteúdo',
-        contentEn: 'Content',
-        contentEs: 'Contenido',
+        content: 'Portuguese content',
+        contentEn: 'English content',
+        contentEs: 'Spanish content',
       });
 
       expect(updateSet).toHaveBeenCalledWith(
         expect.objectContaining({
-          content: 'Conteúdo',
-          contentEn: 'Content',
-          contentEs: 'Contenido',
+          content: 'Portuguese content',
+          contentEn: 'English content',
+          contentEs: 'Spanish content',
         }),
       );
     });
