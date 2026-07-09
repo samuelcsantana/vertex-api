@@ -9,6 +9,7 @@ import { eq } from 'drizzle-orm';
 import type { FastifyRequest } from 'fastify';
 import { DatabaseService } from '../../database/database.service';
 import { users } from '../../database/schema';
+import { ErrorCode } from '../../common/constants/error-codes';
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
 
 @Injectable()
@@ -39,7 +40,10 @@ export class JwtAuthGuard implements CanActivate {
     });
 
     if (user?.isBanned) {
-      throw new UnauthorizedException('User banned by moderation.');
+      throw new UnauthorizedException({
+        message: 'User banned by moderation.',
+        code: ErrorCode.UserBanned,
+      });
     }
 
     request.user = payload;

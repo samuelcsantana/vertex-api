@@ -5,6 +5,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import type { FastifyRequest } from 'fastify';
+import { ErrorCode } from '../../common/constants/error-codes';
 
 @Injectable()
 export class AdminGuard implements CanActivate {
@@ -13,7 +14,10 @@ export class AdminGuard implements CanActivate {
     const user = request.user;
 
     if (!user || user.role !== 'admin') {
-      throw new ForbiddenException('Access restricted to administrators');
+      throw new ForbiddenException({
+        message: 'Access restricted to administrators',
+        code: ErrorCode.AdminOnly,
+      });
     }
 
     return true;

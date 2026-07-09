@@ -6,6 +6,7 @@ import {
 import { desc, eq } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import { comments, posts, users } from '../database/schema';
+import { ErrorCode } from '../common/constants/error-codes';
 
 const safeColumns = {
   id: true,
@@ -45,7 +46,10 @@ export class UsersService {
 
   async setBanned(id: string, isBanned: boolean, requestingUserId: string) {
     if (id === requestingUserId) {
-      throw new BadRequestException('You cannot ban your own account');
+      throw new BadRequestException({
+        message: 'You cannot ban your own account',
+        code: ErrorCode.CannotBanSelf,
+      });
     }
 
     const [updated] = await this.databaseService.db
