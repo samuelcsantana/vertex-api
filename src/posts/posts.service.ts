@@ -10,6 +10,7 @@ import { UploadsService } from '../uploads/uploads.service';
 import { posts, postsToTopics, topics } from '../database/schema';
 import { CreatePostDto } from './dto/create-post.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
+import { ErrorCode } from '../common/constants/error-codes';
 
 const postWithTopicsQuery = {
   with: {
@@ -52,9 +53,13 @@ function rethrowFriendlySlugConflict(error: unknown): never {
   if (pgError?.code === '23505' && pgError.constraint_name) {
     const field = SLUG_CONSTRAINT_FIELDS[pgError.constraint_name];
     if (field) {
-      throw new ConflictException(
-        `The "${field}" slug is already in use by another post.`,
-      );
+      // `field` rides along so the frontend's translated message can name
+      // the offending slug field without parsing the English text.
+      throw new ConflictException({
+        message: `The "${field}" slug is already in use by another post.`,
+        code: ErrorCode.SlugInUse,
+        field,
+      });
     }
   }
 

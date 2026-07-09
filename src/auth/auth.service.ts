@@ -10,6 +10,7 @@ import * as argon2 from 'argon2';
 import { randomBytes } from 'crypto';
 import { DatabaseService } from '../database/database.service';
 import { users } from '../database/schema';
+import { ErrorCode } from '../common/constants/error-codes';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
@@ -40,7 +41,10 @@ export class AuthService {
     });
 
     if (existingUser) {
-      throw new ConflictException('Email is already in use');
+      throw new ConflictException({
+        message: 'Email is already in use',
+        code: ErrorCode.EmailInUse,
+      });
     }
 
     const passwordHash = await argon2.hash(registerDto.password);
@@ -62,7 +66,10 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException({
+        message: 'Invalid credentials',
+        code: ErrorCode.InvalidCredentials,
+      });
     }
 
     const isPasswordValid = await argon2.verify(
@@ -71,7 +78,10 @@ export class AuthService {
     );
 
     if (!isPasswordValid) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException({
+        message: 'Invalid credentials',
+        code: ErrorCode.InvalidCredentials,
+      });
     }
 
     return this.generateAccessToken({

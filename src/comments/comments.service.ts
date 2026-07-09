@@ -7,6 +7,7 @@ import {
 import { desc, eq } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
 import { comments, posts } from '../database/schema';
+import { ErrorCode } from '../common/constants/error-codes';
 import { UserRole } from '../auth/interfaces/jwt-payload.interface';
 import { CreateCommentDto } from './dto/create-comment.dto';
 
@@ -40,7 +41,10 @@ export class CommentsService {
     }
 
     if (!post.allowComments) {
-      throw new BadRequestException('Comments are disabled for this article.');
+      throw new BadRequestException({
+        message: 'Comments are disabled for this article.',
+        code: ErrorCode.CommentsDisabled,
+      });
     }
 
     const [createdComment] = await this.databaseService.db
