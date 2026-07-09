@@ -21,6 +21,7 @@ Vertex is the backend infrastructure for a high-level technical blog and SaaS po
 - **SOLID Principles:**
   - Strictly enforce the Single Responsibility Principle (SRP).
   - Utilize Dependency Inversion (DIP) via NestJS Dependency Injection. Depend on abstractions (interfaces/abstract classes) when integrating external layers like Database Repositories or Third-party APIs.
+  - **Where DIP is (and isn't) applied here:** `ObjectStorage` (`src/uploads/storage/`) is the seam for S3 — `UploadsService` keeps the domain logic (key naming, Markdown parsing) and depends on the abstraction; `S3ObjectStorage` is bound in `UploadsModule`'s providers, and unit tests inject a fake instead of faking AWS env vars. Drizzle deliberately gets **no** repository-interface layer on top: one database, no variation axis, the ORM already is the abstraction — don't add `IPostsRepository`-style ceremony. The OAuth strategies follow the same "fail at the boundary, not at boot" idea: they construct with placeholder credentials and 503 their own routes via an `authenticate()` guard when `GOOGLE_*`/`GITHUB_*` env vars are missing, instead of throwing in the constructor and taking the whole app (and every e2e run) down with them.
 - **Clean Code Rules:**
   - Prefer early returns (guard clauses) to avoid deep nesting.
   - Write self-documenting code with meaningful, descriptive variable/function names.
