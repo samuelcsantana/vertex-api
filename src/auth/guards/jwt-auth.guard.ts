@@ -39,7 +39,7 @@ export class JwtAuthGuard implements CanActivate {
     });
 
     if (user?.isBanned) {
-      throw new UnauthorizedException('Usuário banido pela moderação.');
+      throw new UnauthorizedException('User banned by moderation.');
     }
 
     request.user = payload;

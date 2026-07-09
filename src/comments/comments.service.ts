@@ -40,9 +40,7 @@ export class CommentsService {
     }
 
     if (!post.allowComments) {
-      throw new BadRequestException(
-        'Comentários desativados para este artigo.',
-      );
+      throw new BadRequestException('Comments are disabled for this article.');
     }
 
     const [createdComment] = await this.databaseService.db
