@@ -204,9 +204,16 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
       });
 
       if (existingUser) {
+        // Fill-if-missing, never overwrite: a returning user may have
+        // edited their name/avatar on /profile, and a login must not
+        // clobber that (same policy as linkToExistingUser's avatar).
         [user] = await this.databaseService.db
           .update(users)
-          .set({ githubId, name, avatarUrl })
+          .set({
+            githubId,
+            name: existingUser.name ?? name,
+            avatarUrl: existingUser.avatarUrl ?? avatarUrl,
+          })
           .where(eq(users.id, existingUser.id))
           .returning();
       } else {

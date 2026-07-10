@@ -28,6 +28,24 @@ export class UploadsService {
     return { presignedUrl, fileKey };
   }
 
+  // Self-service avatars live under a per-user prefix, apart from the
+  // admin-only blog-media tree — the folder encodes whose upload it is,
+  // which is what lets the route stay JwtAuthGuard-only.
+  async getAvatarPresignedUrl(
+    userId: string,
+    fileName: string,
+    contentType: string,
+  ) {
+    const fileKey = `avatars/${userId}/${uuidv4()}-${fileName}`;
+
+    const presignedUrl = await this.storage.createPresignedUploadUrl(
+      fileKey,
+      contentType,
+    );
+
+    return { presignedUrl, fileKey };
+  }
+
   // For plain URL fields (covers) that the Markdown pattern above can
   // never match — returns the bucket key, or null for foreign/absent URLs.
   extractBucketKeyFromUrl(url: string | null | undefined): string | null {

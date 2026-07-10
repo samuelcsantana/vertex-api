@@ -15,7 +15,7 @@ import { ErrorCode } from '../common/constants/error-codes';
 const postWithTopicsQuery = {
   with: {
     author: {
-      columns: { id: true, name: true, avatarUrl: true },
+      columns: { id: true, name: true, displayName: true, avatarUrl: true },
     },
     postsToTopics: {
       with: {

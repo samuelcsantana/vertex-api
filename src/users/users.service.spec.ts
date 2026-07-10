@@ -1,15 +1,21 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { DatabaseService } from '../database/database.service';
+import { UploadsService } from '../uploads/uploads.service';
 
 describe('UsersService', () => {
   function createService(options: {
     findMany?: jest.Mock;
+    findFirst?: jest.Mock;
     updateReturning?: jest.Mock;
     txFindFirstPost?: jest.Mock;
     txDeleteUserReturning?: jest.Mock;
+    extractBucketKeyFromUrl?: jest.Mock;
+    deleteFiles?: jest.Mock;
   }) {
     const findMany = options.findMany ?? jest.fn().mockResolvedValue([]);
+    const findFirst =
+      options.findFirst ?? jest.fn().mockResolvedValue(undefined);
 
     const updateReturning =
       options.updateReturning ?? jest.fn().mockResolvedValue([]);
@@ -52,17 +58,26 @@ describe('UsersService', () => {
 
     const databaseService = {
       db: {
-        query: { users: { findMany } },
+        query: { users: { findMany, findFirst } },
         update,
         transaction,
       },
     } as unknown as DatabaseService;
 
+    const deleteFiles =
+      options.deleteFiles ?? jest.fn().mockResolvedValue(undefined);
+    const uploadsService = {
+      extractBucketKeyFromUrl:
+        options.extractBucketKeyFromUrl ?? jest.fn().mockReturnValue(null),
+      deleteFiles,
+    } as unknown as UploadsService;
+
     return {
-      service: new UsersService(databaseService),
+      service: new UsersService(databaseService, uploadsService),
       updateSet,
       txDeleteCommentsWhere,
       txDeleteUserWhere,
+      deleteFiles,
     };
   }
 
@@ -151,6 +166,109 @@ describe('UsersService', () => {
       await expect(service.remove('missing', 'admin-1')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('updateSelf', () => {
+    const existing = {
+      id: 'u1',
+      email: 'u1@example.com',
+      name: 'Old Name',
+      displayName: 'oldnick',
+      avatarUrl: 'https://bucket/avatars/u1/old.png',
+    };
+
+    it('updates the provided fields, keeping the rest', async () => {
+      const findFirst = jest.fn().mockResolvedValue(existing);
+      const updateReturning = jest
+        .fn()
+        .mockResolvedValue([{ id: 'u1', displayName: 'newnick' }]);
+      const { service, updateSet } = createService({
+        findFirst,
+        updateReturning,
+      });
+
+      const result = await service.updateSelf('u1', {
+        displayName: 'newnick',
+      });
+
+      expect(updateSet).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Old Name',
+          displayName: 'newnick',
+          avatarUrl: existing.avatarUrl,
+        }),
+      );
+      expect(result).toEqual({ id: 'u1', displayName: 'newnick' });
+    });
+
+    it('clears the avatar on "" and deletes the old bucket-hosted object', async () => {
+      const findFirst = jest.fn().mockResolvedValue(existing);
+      const updateReturning = jest
+        .fn()
+        .mockResolvedValue([{ id: 'u1', avatarUrl: null }]);
+      const extractBucketKeyFromUrl = jest
+        .fn()
+        .mockReturnValue('avatars/u1/old.png');
+      const { service, updateSet, deleteFiles } = createService({
+        findFirst,
+        updateReturning,
+        extractBucketKeyFromUrl,
+      });
+
+      await service.updateSelf('u1', { avatarUrl: '' });
+
+      expect(updateSet).toHaveBeenCalledWith(
+        expect.objectContaining({ avatarUrl: null }),
+      );
+      expect(deleteFiles).toHaveBeenCalledWith(['avatars/u1/old.png']);
+    });
+
+    it('does not delete a replaced avatar hosted outside the bucket', async () => {
+      const findFirst = jest.fn().mockResolvedValue({
+        ...existing,
+        avatarUrl: 'https://lh3.googleusercontent.com/photo.jpg',
+      });
+      const updateReturning = jest
+        .fn()
+        .mockResolvedValue([{ id: 'u1', avatarUrl: 'https://bucket/new.png' }]);
+      const { service, deleteFiles } = createService({
+        findFirst,
+        updateReturning,
+      });
+
+      await service.updateSelf('u1', { avatarUrl: 'https://bucket/new.png' });
+
+      expect(deleteFiles).not.toHaveBeenCalled();
+    });
+
+    it('still resolves when old-avatar cleanup fails', async () => {
+      const findFirst = jest.fn().mockResolvedValue(existing);
+      const updateReturning = jest
+        .fn()
+        .mockResolvedValue([{ id: 'u1', avatarUrl: null }]);
+      const extractBucketKeyFromUrl = jest
+        .fn()
+        .mockReturnValue('avatars/u1/old.png');
+      const deleteFiles = jest.fn().mockRejectedValue(new Error('S3 down'));
+      const { service } = createService({
+        findFirst,
+        updateReturning,
+        extractBucketKeyFromUrl,
+        deleteFiles,
+      });
+
+      await expect(
+        service.updateSelf('u1', { avatarUrl: '' }),
+      ).resolves.toEqual({ id: 'u1', avatarUrl: null });
+    });
+
+    it('throws NotFoundException when the user does not exist', async () => {
+      const { service } = createService({});
+
+      await expect(
+        service.updateSelf('missing', { name: 'X' }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

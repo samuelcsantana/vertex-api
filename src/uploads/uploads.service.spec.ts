@@ -33,6 +33,26 @@ describe('UploadsService', () => {
     });
   });
 
+  describe('getAvatarPresignedUrl', () => {
+    it('scopes the key under the requesting user, apart from blog-media', async () => {
+      const { service, storage } = createService();
+
+      const result = await service.getAvatarPresignedUrl(
+        'user-1',
+        'me.png',
+        'image/png',
+      );
+
+      expect(result.fileKey).toMatch(
+        /^avatars\/user-1\/[0-9a-f-]{36}-me\.png$/,
+      );
+      expect(storage.createPresignedUploadUrl).toHaveBeenCalledWith(
+        result.fileKey,
+        'image/png',
+      );
+    });
+  });
+
   describe('extractBucketKeyFromUrl', () => {
     it('returns the key for a bucket-hosted URL', () => {
       const { service } = createService();

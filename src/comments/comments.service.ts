@@ -21,7 +21,7 @@ export class CommentsService {
       orderBy: desc(comments.createdAt),
       with: {
         author: {
-          columns: { id: true, name: true, avatarUrl: true },
+          columns: { id: true, name: true, displayName: true, avatarUrl: true },
         },
       },
     });
