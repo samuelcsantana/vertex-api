@@ -72,4 +72,11 @@ export class UsersController {
   async remove(@Param('id') id: string, @Req() request: FastifyRequest) {
     return this.usersService.remove(id, request.user!.sub);
   }
+
+  // Last on purpose — :id must not swallow the literal routes above.
+  @Get(':id')
+  @UseGuards(AdminGuard)
+  async findOne(@Param('id') id: string) {
+    return this.usersService.findOne(id);
+  }
 }

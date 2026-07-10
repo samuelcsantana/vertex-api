@@ -15,13 +15,36 @@ import { CreateCommentDto } from './dto/create-comment.dto';
 export class CommentsService {
   constructor(private readonly databaseService: DatabaseService) {}
 
-  async findAllForPost(postId: string) {
+  // includeAuthorEmail is admin-only enrichment for moderation (see the
+  // controller's OptionalJwtAuthGuard) — the public payload must never
+  // carry visitor emails (LGPD data minimization).
+  async findAllForPost(postId: string, includeAuthorEmail = false) {
     return this.databaseService.db.query.comments.findMany({
       where: eq(comments.postId, postId),
       orderBy: desc(comments.createdAt),
       with: {
         author: {
-          columns: { id: true, name: true, displayName: true, avatarUrl: true },
+          columns: {
+            id: true,
+            name: true,
+            displayName: true,
+            avatarUrl: true,
+            ...(includeAuthorEmail ? { email: true } : {}),
+          },
+        },
+      },
+    });
+  }
+
+  // Every comment a user has written, with just enough of the post to
+  // link back to it — the admin user-detail page's moderation view.
+  async findAllForAuthor(authorId: string) {
+    return this.databaseService.db.query.comments.findMany({
+      where: eq(comments.authorId, authorId),
+      orderBy: desc(comments.createdAt),
+      with: {
+        post: {
+          columns: { id: true, title: true, slug: true },
         },
       },
     });

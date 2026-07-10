@@ -18,6 +18,7 @@ const safeColumns = {
   displayName: true,
   avatarUrl: true,
   githubId: true,
+  googleId: true,
   role: true,
   isBanned: true,
   createdAt: true,
@@ -33,6 +34,7 @@ const safeReturning = {
   displayName: users.displayName,
   avatarUrl: users.avatarUrl,
   githubId: users.githubId,
+  googleId: users.googleId,
   role: users.role,
   isBanned: users.isBanned,
   createdAt: users.createdAt,
@@ -52,6 +54,19 @@ export class UsersService {
       orderBy: desc(users.createdAt),
       columns: safeColumns,
     });
+  }
+
+  async findOne(id: string) {
+    const user = await this.databaseService.db.query.users.findFirst({
+      where: eq(users.id, id),
+      columns: safeColumns,
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return user;
   }
 
   async setBanned(id: string, isBanned: boolean, requestingUserId: string) {

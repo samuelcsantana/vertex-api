@@ -94,6 +94,28 @@ describe('UsersService', () => {
     });
   });
 
+  describe('findOne', () => {
+    it('returns the user when found', async () => {
+      const findFirst = jest
+        .fn()
+        .mockResolvedValue({ id: 'u1', email: 'a@example.com' });
+      const { service } = createService({ findFirst });
+
+      await expect(service.findOne('u1')).resolves.toEqual({
+        id: 'u1',
+        email: 'a@example.com',
+      });
+    });
+
+    it('throws NotFoundException when the user does not exist', async () => {
+      const { service } = createService({});
+
+      await expect(service.findOne('missing')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
   describe('setBanned', () => {
     it('rejects banning your own account', async () => {
       const { service } = createService({});
