@@ -1,16 +1,20 @@
 import {
   Injectable,
+  InternalServerErrorException,
   ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy, Profile, VerifyCallback } from 'passport-google-oauth20';
-import { eq } from 'drizzle-orm';
+import type { FastifyRequest } from 'fastify';
+import { eq, or } from 'drizzle-orm';
 import { randomBytes } from 'crypto';
 import * as argon2 from 'argon2';
 import { DatabaseService } from '../../database/database.service';
 import { users } from '../../database/schema';
 import { JwtPayload, UserRole } from '../interfaces/jwt-payload.interface';
+import { GoogleAlreadyLinkedException } from '../exceptions/google-link.exceptions';
+import { getVerifiedLinkUserId } from '../utils/link-cookie.util';
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
@@ -35,6 +39,9 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       clientSecret: clientSecret ?? 'google-oauth-not-configured',
       callbackURL,
       scope: ['email', 'profile'],
+      // Needed to read the signed link_user_id cookie that distinguishes
+      // an account-linking popup from a plain login (see /auth/google/link).
+      passReqToCallback: true,
     });
 
     this.isConfigured = Boolean(clientID && clientSecret);
@@ -51,11 +58,13 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   }
 
   async validate(
+    req: FastifyRequest,
     accessToken: string,
     refreshToken: string,
     profile: Profile,
     done: VerifyCallback,
   ): Promise<void> {
+    const googleId = profile.id;
     const email = profile.emails?.[0]?.value;
 
     if (!email) {
@@ -70,19 +79,104 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
         ? profile.photos[0].value
         : null;
 
+    const linkUserId = getVerifiedLinkUserId(req);
+
+    if (linkUserId) {
+      const payload = await this.linkToExistingUser(
+        linkUserId,
+        googleId,
+        avatarUrl,
+      );
+      done(null, payload);
+      return;
+    }
+
+    const payload = await this.loginOrRegister(
+      googleId,
+      email,
+      name,
+      avatarUrl,
+    );
+
+    done(null, payload);
+  }
+
+  private async linkToExistingUser(
+    linkUserId: string,
+    googleId: string,
+    avatarUrl: string | null,
+  ): Promise<JwtPayload> {
+    try {
+      const conflictingUser =
+        await this.databaseService.db.query.users.findFirst({
+          where: eq(users.googleId, googleId),
+        });
+
+      if (conflictingUser && conflictingUser.id !== linkUserId) {
+        throw new GoogleAlreadyLinkedException();
+      }
+
+      const currentUser = await this.databaseService.db.query.users.findFirst({
+        where: eq(users.id, linkUserId),
+      });
+
+      if (!currentUser) {
+        throw new UnauthorizedException(
+          'User to link the Google account to was not found.',
+        );
+      }
+
+      const [updatedUser] = await this.databaseService.db
+        .update(users)
+        .set({
+          googleId,
+          avatarUrl: currentUser.avatarUrl ?? avatarUrl,
+        })
+        .where(eq(users.id, linkUserId))
+        .returning();
+
+      return {
+        sub: updatedUser.id,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        name: updatedUser.name,
+        avatarUrl: updatedUser.avatarUrl,
+      };
+    } catch (error) {
+      if (
+        error instanceof GoogleAlreadyLinkedException ||
+        error instanceof UnauthorizedException
+      ) {
+        throw error;
+      }
+
+      console.error('Failed to link Google account:', error);
+      throw new InternalServerErrorException('Failed to link Google account');
+    }
+  }
+
+  private async loginOrRegister(
+    googleId: string,
+    email: string,
+    name: string,
+    avatarUrl: string | null,
+  ): Promise<JwtPayload> {
+    // googleId match first (survives a Google-account email change), then
+    // email (merges with accounts created via OTP/password/GitHub under
+    // the same address).
     const existingUser = await this.databaseService.db.query.users.findFirst({
-      where: eq(users.email, email),
+      where: or(eq(users.googleId, googleId), eq(users.email, email)),
     });
 
     let user: typeof users.$inferSelect;
 
     if (existingUser) {
       // Fill-if-missing, never overwrite: a returning user may have edited
-      // their name/avatar on /profile, and a login must not clobber that
-      // (same policy as the GitHub strategy's linkToExistingUser).
+      // their name/avatar on /profile, and a login must not clobber that.
       [user] = await this.databaseService.db
         .update(users)
         .set({
+          googleId,
           name: existingUser.name ?? name,
           avatarUrl: existingUser.avatarUrl ?? avatarUrl,
         })
@@ -97,6 +191,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
       [user] = await this.databaseService.db
         .insert(users)
         .values({
+          googleId,
           email,
           name,
           avatarUrl,
@@ -106,14 +201,12 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
         .returning();
     }
 
-    const payload: JwtPayload = {
+    return {
       sub: user.id,
       email: user.email,
       role: user.role,
       name: user.name,
       avatarUrl: user.avatarUrl,
     };
-
-    done(null, payload);
   }
 }

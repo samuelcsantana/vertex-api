@@ -162,6 +162,7 @@ export class AuthService {
       displayName: user.displayName,
       avatarUrl: user.avatarUrl,
       githubId: user.githubId,
+      googleId: user.googleId,
     };
   }
 }

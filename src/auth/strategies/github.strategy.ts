@@ -19,6 +19,7 @@ import {
   GithubAlreadyLinkedException,
   GithubEmailConflictException,
 } from '../exceptions/github-link.exceptions';
+import { getVerifiedLinkUserId } from '../utils/link-cookie.util';
 
 // passport-github2's typings omit `primary`/`verified`, which GitHub does
 // include on each entry in the `user:email` scope response.
@@ -101,7 +102,7 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
         ? profile.photos[0].value
         : null;
 
-    const linkUserId = this.getVerifiedLinkUserId(req);
+    const linkUserId = getVerifiedLinkUserId(req);
 
     if (linkUserId) {
       const payload = await this.linkToExistingUser(
@@ -122,18 +123,6 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
     );
 
     done(null, payload);
-  }
-
-  private getVerifiedLinkUserId(req: FastifyRequest): string | null {
-    const signedCookie = req.cookies?.link_user_id;
-
-    if (!signedCookie) {
-      return null;
-    }
-
-    const unsigned = req.unsignCookie(signedCookie);
-
-    return unsigned.valid && unsigned.value ? unsigned.value : null;
   }
 
   private async linkToExistingUser(

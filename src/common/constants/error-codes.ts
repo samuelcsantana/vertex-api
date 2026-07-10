@@ -16,6 +16,7 @@ export const ErrorCode = {
   SlugInUse: 'SLUG_IN_USE',
   GithubAlreadyLinked: 'GITHUB_ALREADY_LINKED',
   GithubEmailConflict: 'GITHUB_EMAIL_CONFLICT',
+  GoogleAlreadyLinked: 'GOOGLE_ALREADY_LINKED',
   OtpInvalid: 'OTP_INVALID',
   OtpExpired: 'OTP_EXPIRED',
   OtpTooManyAttempts: 'OTP_TOO_MANY_ATTEMPTS',
