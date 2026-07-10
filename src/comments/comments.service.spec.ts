@@ -7,18 +7,72 @@ import { CommentsService } from './comments.service';
 import { DatabaseService } from '../database/database.service';
 
 describe('CommentsService.findAllForPost', () => {
-  it('returns whatever the query layer returns', async () => {
+  function createService() {
     const findMany = jest
       .fn()
       .mockResolvedValue([{ id: 'c1', content: 'Nice post' }]);
     const databaseService = {
       db: { query: { comments: { findMany } } },
     } as unknown as DatabaseService;
-    const service = new CommentsService(databaseService);
+
+    return { service: new CommentsService(databaseService), findMany };
+  }
+
+  it('returns whatever the query layer returns', async () => {
+    const { service } = createService();
 
     await expect(service.findAllForPost('post-1')).resolves.toEqual([
       { id: 'c1', content: 'Nice post' },
     ]);
+  });
+
+  it('never selects the author email for public callers', async () => {
+    const { service, findMany } = createService();
+
+    await service.findAllForPost('post-1');
+
+    const [{ with: withClause }] = findMany.mock.calls[0] as [
+      { with: { author: { columns: Record<string, boolean> } } },
+    ];
+    expect(withClause.author.columns).not.toHaveProperty('email');
+  });
+
+  it('selects the author email only for the admin moderation view', async () => {
+    const { service, findMany } = createService();
+
+    await service.findAllForPost('post-1', true);
+
+    const [{ with: withClause }] = findMany.mock.calls[0] as [
+      { with: { author: { columns: Record<string, boolean> } } },
+    ];
+    expect(withClause.author.columns.email).toBe(true);
+  });
+});
+
+describe('CommentsService.findAllForAuthor', () => {
+  it('queries by author and joins the post title/slug for linking', async () => {
+    const findMany = jest
+      .fn()
+      .mockResolvedValue([
+        { id: 'c1', content: 'Hi', post: { id: 'p1', title: 'T', slug: 's' } },
+      ]);
+    const databaseService = {
+      db: { query: { comments: { findMany } } },
+    } as unknown as DatabaseService;
+    const service = new CommentsService(databaseService);
+
+    await expect(service.findAllForAuthor('user-1')).resolves.toEqual([
+      { id: 'c1', content: 'Hi', post: { id: 'p1', title: 'T', slug: 's' } },
+    ]);
+
+    const [{ with: withClause }] = findMany.mock.calls[0] as [
+      { with: { post: { columns: Record<string, boolean> } } },
+    ];
+    expect(withClause.post.columns).toEqual({
+      id: true,
+      title: true,
+      slug: true,
+    });
   });
 });
 

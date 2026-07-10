@@ -8,6 +8,7 @@ import { EmailSender } from './email/email-sender';
 import { ResendEmailSender } from './email/resend-email-sender';
 import { ConsoleEmailSender } from './email/console-email-sender';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from './guards/optional-jwt-auth.guard';
 import { AdminGuard } from './guards/admin.guard';
 import { GoogleStrategy } from './strategies/google.strategy';
 import { GithubStrategy } from './strategies/github.strategy';
@@ -48,10 +49,11 @@ if (!process.env.JWT_SECRET) {
       },
     },
     JwtAuthGuard,
+    OptionalJwtAuthGuard,
     AdminGuard,
     GoogleStrategy,
     GithubStrategy,
   ],
-  exports: [JwtAuthGuard, AdminGuard, JwtModule],
+  exports: [JwtAuthGuard, OptionalJwtAuthGuard, AdminGuard, JwtModule],
 })
 export class AuthModule {}
