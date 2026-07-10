@@ -16,6 +16,10 @@ export const ErrorCode = {
   SlugInUse: 'SLUG_IN_USE',
   GithubAlreadyLinked: 'GITHUB_ALREADY_LINKED',
   GithubEmailConflict: 'GITHUB_EMAIL_CONFLICT',
+  OtpInvalid: 'OTP_INVALID',
+  OtpExpired: 'OTP_EXPIRED',
+  OtpTooManyAttempts: 'OTP_TOO_MANY_ATTEMPTS',
+  OtpCooldown: 'OTP_COOLDOWN',
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];

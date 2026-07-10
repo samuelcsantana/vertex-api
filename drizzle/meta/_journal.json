@@ -99,6 +99,13 @@
       "when": 1783695850431,
       "tag": "0013_light_longshot",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1783701604599,
+      "tag": "0014_opposite_snowbird",
+      "breakpoints": true
     }
   ]
 }

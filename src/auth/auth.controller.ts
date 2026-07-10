@@ -14,6 +14,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { ApiCookieAuth, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
+import { OtpService } from './otp.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { GithubAuthGuard } from './guards/github-auth.guard';
@@ -26,13 +27,20 @@ import { registerSchema } from './dto/register.dto';
 import type { RegisterDto } from './dto/register.dto';
 import { exchangeSchema } from './dto/exchange.dto';
 import type { ExchangeDto } from './dto/exchange.dto';
+import { requestOtpSchema } from './dto/request-otp.dto';
+import type { RequestOtpDto } from './dto/request-otp.dto';
+import { verifyOtpSchema } from './dto/verify-otp.dto';
+import type { VerifyOtpDto } from './dto/verify-otp.dto';
 
 const SEVEN_DAYS_IN_SECONDS = 7 * 24 * 60 * 60;
 const LINK_COOKIE_MAX_AGE_SECONDS = 5 * 60;
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly otpService: OtpService,
+  ) {}
 
   // Stricter than the global default (100/60s): both are direct credential-
   // guessing/account-spam targets, so brute-forcing them needs its own,
@@ -72,6 +80,33 @@ export class AuthController {
     const token = await this.authService.exchangeOAuthCode(exchangeDto.code);
 
     return { access_token: token };
+  }
+
+  // Same tightened budget rationale as register/login above — request is
+  // an email-spam vector, verify is a code-guessing vector.
+  @Post('otp/request')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 3, ttl: 60_000 } })
+  @ApiOperation({ summary: 'Email a passwordless sign-in code' })
+  async requestOtp(
+    @Body(new ZodValidationPipe(requestOtpSchema)) requestOtpDto: RequestOtpDto,
+  ) {
+    return this.otpService.requestCode(
+      requestOtpDto.email,
+      requestOtpDto.locale,
+    );
+  }
+
+  @Post('otp/verify')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @ApiOperation({
+    summary: 'Verify an emailed sign-in code and receive an access token',
+  })
+  async verifyOtp(
+    @Body(new ZodValidationPipe(verifyOtpSchema)) verifyOtpDto: VerifyOtpDto,
+  ) {
+    return this.otpService.verifyCode(verifyOtpDto.email, verifyOtpDto.code);
   }
 
   @Get('profile')
