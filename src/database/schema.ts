@@ -5,6 +5,7 @@ import {
   varchar,
   text,
   boolean,
+  integer,
   jsonb,
   timestamp,
   pgEnum,
@@ -24,6 +25,20 @@ export const users = pgTable('users', {
   role: userRoleEnum('role').default('user').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// Pending passwordless-login codes. In Postgres rather than the in-memory
+// Map the OAuth exchange codes use: an OTP lives 10 minutes and must
+// survive a Render restart/deploy, unlike the 60-second exchange code.
+// email is unique — one active code per address; a new request replaces
+// the previous row.
+export const emailOtps = pgTable('email_otps', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: varchar('email').notNull().unique(),
+  codeHash: varchar('code_hash').notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+  attempts: integer('attempts').default(0).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
 export const projects = pgTable('projects', {
