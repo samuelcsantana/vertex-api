@@ -9,11 +9,19 @@ import {
   GithubAlreadyLinkedException,
   GithubEmailConflictException,
 } from '../exceptions/github-link.exceptions';
+import { GoogleAlreadyLinkedException } from '../exceptions/google-link.exceptions';
 
-@Catch(GithubAlreadyLinkedException, GithubEmailConflictException)
-export class GithubPopupExceptionFilter implements ExceptionFilter {
+@Catch(
+  GithubAlreadyLinkedException,
+  GithubEmailConflictException,
+  GoogleAlreadyLinkedException,
+)
+export class OAuthPopupExceptionFilter implements ExceptionFilter {
   catch(
-    exception: GithubAlreadyLinkedException | GithubEmailConflictException,
+    exception:
+      | GithubAlreadyLinkedException
+      | GithubEmailConflictException
+      | GoogleAlreadyLinkedException,
     host: ArgumentsHost,
   ) {
     const res = host.switchToHttp().getResponse<FastifyReply>();

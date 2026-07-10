@@ -2,7 +2,7 @@ import { ConflictException } from '@nestjs/common';
 import { ErrorCode } from '../../common/constants/error-codes';
 
 // Both exceptions expose their code as a property (not just inside the
-// response body) so GithubPopupExceptionFilter can put it in the redirect
+// response body) so OAuthPopupExceptionFilter can put it in the redirect
 // URL it sends the OAuth popup to — see that filter for how the code
 // reaches the frontend, which translates it per-locale.
 export class GithubAlreadyLinkedException extends ConflictException {

@@ -18,7 +18,7 @@ import { OtpService } from './otp.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { GoogleAuthGuard } from './guards/google-auth.guard';
 import { GithubAuthGuard } from './guards/github-auth.guard';
-import { GithubPopupExceptionFilter } from './filters/github-popup-exception.filter';
+import { OAuthPopupExceptionFilter } from './filters/oauth-popup-exception.filter';
 import { sendPopupScript } from './utils/popup-response.util';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { loginSchema } from './dto/login.dto';
@@ -122,13 +122,40 @@ export class AuthController {
   @ApiOperation({ summary: 'Redirect to Google OAuth2 consent screen' })
   googleAuth() {}
 
+  @Get('google/link')
+  @UseGuards(JwtAuthGuard)
+  @ApiCookieAuth('access_token')
+  @ApiOperation({
+    summary: 'Start linking a Google account to the logged-in user',
+  })
+  googleLink(@Req() request: FastifyRequest, @Res() res: FastifyReply) {
+    res.setCookie('link_user_id', request.user!.sub, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      signed: true,
+      maxAge: LINK_COOKIE_MAX_AGE_SECONDS,
+    });
+
+    return res.redirect('/auth/google', HttpStatus.FOUND);
+  }
+
   @Get('google/callback')
   @UseGuards(GoogleAuthGuard)
+  @UseFilters(OAuthPopupExceptionFilter)
   @ApiOperation({ summary: 'Google OAuth2 callback' })
   async googleAuthCallback(
     @Req() request: FastifyRequest,
     @Res() res: FastifyReply,
   ) {
+    const isLinkFlow = Boolean(request.cookies?.link_user_id);
+
+    if (isLinkFlow) {
+      res.clearCookie('link_user_id', { path: '/' });
+      return sendPopupScript(res, 'window.close();');
+    }
+
     return this.handleOAuthCallback(request, res);
   }
 
@@ -158,7 +185,7 @@ export class AuthController {
 
   @Get('github/callback')
   @UseGuards(GithubAuthGuard)
-  @UseFilters(GithubPopupExceptionFilter)
+  @UseFilters(OAuthPopupExceptionFilter)
   @ApiOperation({ summary: 'GitHub OAuth2 callback' })
   async githubAuthCallback(
     @Req() request: FastifyRequest,
