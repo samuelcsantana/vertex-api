@@ -35,6 +35,7 @@ describe('PostsService', () => {
     findFirst?: jest.Mock;
     deleteReturning?: jest.Mock;
     extractBucketKeysFromContent?: jest.Mock;
+    extractBucketKeyFromUrl?: jest.Mock;
     deleteFiles?: jest.Mock;
     // Simulates the "postgres" driver rejecting mid-transaction (e.g. a
     // unique constraint violation) instead of resolving normally.
@@ -78,8 +79,12 @@ describe('PostsService', () => {
             .mockImplementation((cb: (tx: unknown) => unknown) => cb(tx));
 
     const findMany = options.findMany ?? jest.fn().mockResolvedValue([]);
+    // Defaults to an existing bare row: update()'s pre-cleanup snapshot
+    // fetch goes through this, and most tests assume the post exists.
+    // Tests exercising "post not found" pass their own findFirst.
     const findFirst =
-      options.findFirst ?? jest.fn().mockResolvedValue(undefined);
+      options.findFirst ??
+      jest.fn().mockResolvedValue({ id: 'post-1', content: 'Body' });
 
     const deleteReturning =
       options.deleteReturning ?? jest.fn().mockResolvedValue([]);
@@ -99,6 +104,8 @@ describe('PostsService', () => {
     const uploadsService = {
       extractBucketKeysFromContent:
         options.extractBucketKeysFromContent ?? jest.fn().mockReturnValue([]),
+      extractBucketKeyFromUrl:
+        options.extractBucketKeyFromUrl ?? jest.fn().mockReturnValue(null),
       deleteFiles:
         options.deleteFiles ?? jest.fn().mockResolvedValue(undefined),
     } as unknown as UploadsService;
@@ -337,6 +344,104 @@ describe('PostsService', () => {
 
       expect(txDelete).not.toHaveBeenCalled();
     });
+
+    it('throws NotFoundException before updating when the post does not exist', async () => {
+      const findFirst = jest.fn().mockResolvedValue(undefined);
+      const { service } = createService({ findFirst });
+
+      await expect(
+        service.update('missing', { title: 'Updated' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('deletes bucket media the edit dropped, keeping what is still referenced', async () => {
+      // Old post: cover + one inline image. Updated post (refetched inside
+      // the tx): new cover, same inline image — only the old cover key
+      // should be deleted.
+      const findFirst = jest.fn().mockResolvedValue({
+        id: 'post-1',
+        content: '![x](https://bucket/inline-1.png)',
+        coverUrl: 'https://bucket/old-cover.png',
+      });
+      const txFindFirst = jest.fn().mockResolvedValue({
+        ...rawPostWithTopics,
+        content: '![x](https://bucket/inline-1.png)',
+        coverUrl: 'https://bucket/new-cover.png',
+      });
+      const extractBucketKeysFromContent = jest
+        .fn()
+        .mockImplementation((content: string) =>
+          content.includes('inline-1') ? ['inline-1.png'] : [],
+        );
+      const extractBucketKeyFromUrl = jest
+        .fn()
+        .mockImplementation((url: string | null) =>
+          url ? url.replace('https://bucket/', '') : null,
+        );
+      const deleteFiles = jest.fn().mockResolvedValue(undefined);
+      const { service } = createService({
+        findFirst,
+        txFindFirst,
+        extractBucketKeysFromContent,
+        extractBucketKeyFromUrl,
+        deleteFiles,
+      });
+
+      await service.update('post-1', { coverUrl: 'https://bucket/new-cover.png' });
+
+      expect(deleteFiles).toHaveBeenCalledWith(['old-cover.png']);
+    });
+
+    it('does not attempt cleanup when the edit drops no media', async () => {
+      const findFirst = jest.fn().mockResolvedValue({
+        id: 'post-1',
+        content: 'Body',
+        coverUrl: 'https://bucket/cover.png',
+      });
+      const txFindFirst = jest.fn().mockResolvedValue({
+        ...rawPostWithTopics,
+        coverUrl: 'https://bucket/cover.png',
+      });
+      const extractBucketKeyFromUrl = jest
+        .fn()
+        .mockImplementation((url: string | null) =>
+          url ? url.replace('https://bucket/', '') : null,
+        );
+      const deleteFiles = jest.fn().mockResolvedValue(undefined);
+      const { service } = createService({
+        findFirst,
+        txFindFirst,
+        extractBucketKeyFromUrl,
+        deleteFiles,
+      });
+
+      await service.update('post-1', { title: 'Updated' });
+
+      expect(deleteFiles).not.toHaveBeenCalled();
+    });
+
+    it('still resolves when post-update cleanup fails', async () => {
+      const findFirst = jest.fn().mockResolvedValue({
+        id: 'post-1',
+        content: 'Body',
+        coverUrl: 'https://bucket/old-cover.png',
+      });
+      const extractBucketKeyFromUrl = jest
+        .fn()
+        .mockImplementation((url: string | null) =>
+          url ? url.replace('https://bucket/', '') : null,
+        );
+      const deleteFiles = jest.fn().mockRejectedValue(new Error('S3 down'));
+      const { service } = createService({
+        findFirst,
+        extractBucketKeyFromUrl,
+        deleteFiles,
+      });
+
+      await expect(
+        service.update('post-1', { coverUrl: undefined }),
+      ).resolves.toEqual(flattenedPost);
+    });
   });
 
   describe('remove', () => {
@@ -394,6 +499,64 @@ describe('PostsService', () => {
       await expect(service.remove('missing')).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it('cleans up bucket-hosted covers in every locale', async () => {
+      const deleteReturning = jest.fn().mockResolvedValue([
+        {
+          id: 'post-1',
+          content: 'no images',
+          coverUrl: 'https://bucket/cover-pt.png',
+          coverUrlEn: 'https://bucket/cover-en.png',
+          coverUrlEs: null,
+        },
+      ]);
+      const extractBucketKeyFromUrl = jest
+        .fn()
+        .mockImplementation((url: string | null) =>
+          url ? url.replace('https://bucket/', '') : null,
+        );
+      const deleteFiles = jest.fn().mockResolvedValue(undefined);
+      const { service } = createService({
+        deleteReturning,
+        extractBucketKeyFromUrl,
+        deleteFiles,
+      });
+
+      await service.remove('post-1');
+
+      expect(deleteFiles).toHaveBeenCalledWith([
+        'cover-pt.png',
+        'cover-en.png',
+      ]);
+    });
+
+    it('scans all content locales and deduplicates shared keys', async () => {
+      const deleteReturning = jest.fn().mockResolvedValue([
+        {
+          id: 'post-1',
+          content: 'pt-body',
+          contentEn: 'en-body',
+          contentEs: 'es-body',
+        },
+      ]);
+      // The same image reused across translations must be deleted once.
+      const extractBucketKeysFromContent = jest
+        .fn()
+        .mockImplementation((content: string) =>
+          content === 'es-body' ? ['shared.png', 'es-only.png'] : ['shared.png'],
+        );
+      const deleteFiles = jest.fn().mockResolvedValue(undefined);
+      const { service } = createService({
+        deleteReturning,
+        extractBucketKeysFromContent,
+        deleteFiles,
+      });
+
+      await service.remove('post-1');
+
+      expect(extractBucketKeysFromContent).toHaveBeenCalledTimes(3);
+      expect(deleteFiles).toHaveBeenCalledWith(['shared.png', 'es-only.png']);
     });
   });
 });

@@ -33,6 +33,32 @@ describe('UploadsService', () => {
     });
   });
 
+  describe('extractBucketKeyFromUrl', () => {
+    it('returns the key for a bucket-hosted URL', () => {
+      const { service } = createService();
+
+      expect(
+        service.extractBucketKeyFromUrl(
+          'https://test-bucket.s3.us-east-1.amazonaws.com/blog-media/2026-07/abc-cover.png',
+        ),
+      ).toBe('blog-media/2026-07/abc-cover.png');
+    });
+
+    it('returns null for a URL hosted outside the bucket', () => {
+      const { service } = createService();
+
+      expect(
+        service.extractBucketKeyFromUrl('https://example.com/cover.png'),
+      ).toBeNull();
+    });
+
+    it.each([null, undefined, ''])('returns null for %p', (url) => {
+      const { service } = createService();
+
+      expect(service.extractBucketKeyFromUrl(url)).toBeNull();
+    });
+  });
+
   describe('extractBucketKeysFromContent', () => {
     it('extracts bucket-hosted image keys from markdown content', () => {
       const { service } = createService();

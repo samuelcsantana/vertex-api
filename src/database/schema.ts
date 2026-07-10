@@ -52,8 +52,15 @@ export const posts = pgTable('posts', {
   contentEs: text('content_es'),
   isPublished: boolean('is_published').default(false).notNull(),
   allowComments: boolean('allow_comments').default(true).notNull(),
+  // Cover image is per locale, same fallback rule as title/content: a
+  // locale without its own cover serves the pt one. Localized because
+  // covers can carry embedded text (e.g. the article title in the art).
   coverUrl: text('cover_url'),
+  coverUrlEn: text('cover_url_en'),
+  coverUrlEs: text('cover_url_es'),
   coverAlt: text('cover_alt'),
+  coverAltEn: text('cover_alt_en'),
+  coverAltEs: text('cover_alt_es'),
   // Manually-written SEO snippet for search results — per locale, same as
   // title/content: a locale without its own override falls back to an
   // auto-generated excerpt of that locale's own (possibly also-fallback)

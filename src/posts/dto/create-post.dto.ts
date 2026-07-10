@@ -29,9 +29,14 @@ export const createPostSchema = z.object({
   isPublished: z.boolean().optional(),
   allowComments: z.boolean().optional(),
   coverUrl: z.string().url().optional(),
-  // Only meaningful once coverUrl is set, but not required even then — an
-  // admin can still legitimately mark a cover as purely decorative.
+  coverUrlEn: z.string().url().optional(),
+  coverUrlEs: z.string().url().optional(),
+  // Only meaningful once the matching coverUrl is set, but not required
+  // even then — an admin can still legitimately mark a cover as purely
+  // decorative.
   coverAlt: z.string().optional(),
+  coverAltEn: z.string().optional(),
+  coverAltEs: z.string().optional(),
   // Manually-written search-result snippet, per locale — a locale without
   // its own falls back to an auto-generated excerpt of that locale's own
   // content (frontend concern, see localized-content.ts's

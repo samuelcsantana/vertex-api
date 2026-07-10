@@ -92,6 +92,13 @@
       "when": 1783603708184,
       "tag": "0012_skinny_warpath",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1783695850431,
+      "tag": "0013_light_longshot",
+      "breakpoints": true
     }
   ]
 }

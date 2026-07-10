@@ -157,15 +157,26 @@ export class PostsService {
   async update(id: string, updatePostDto: UpdatePostDto) {
     const { topicIds, ...postData } = updatePostDto;
 
-    return this.databaseService.db
+    // Snapshot the pre-update media so bucket objects the edit drops
+    // (a swapped cover, a removed inline image) can be cleaned up after
+    // the transaction commits.
+    const existingPost = await this.databaseService.db.query.posts.findFirst({
+      where: eq(posts.id, id),
+    });
+
+    if (!existingPost) {
+      throw new NotFoundException('Post not found');
+    }
+
+    const updatedPost = await this.databaseService.db
       .transaction(async (tx) => {
-        const [updatedPost] = await tx
+        const [updated] = await tx
           .update(posts)
           .set({ ...postData, updatedAt: new Date() })
           .where(eq(posts.id, id))
           .returning();
 
-        if (!updatedPost) {
+        if (!updated) {
           throw new NotFoundException('Post not found');
         }
 
@@ -187,6 +198,17 @@ export class PostsService {
         return withFlattenedTopics(postWithTopics!);
       })
       .catch(rethrowFriendlySlugConflict);
+
+    // Diffing against the refetched row (not the partial payload) keeps
+    // media referenced by untouched fields alive on partial updates.
+    const keptKeys = new Set(this.collectMediaKeys(updatedPost));
+    const removedKeys = this.collectMediaKeys(existingPost).filter(
+      (key) => !keptKeys.has(key),
+    );
+
+    await this.deleteMediaKeys(id, removedKeys);
+
+    return updatedPost;
   }
 
   async remove(id: string) {
@@ -199,20 +221,57 @@ export class PostsService {
       throw new NotFoundException('Post not found');
     }
 
-    const imageKeys = this.uploadsService.extractBucketKeysFromContent(
-      deletedPost.content,
-    );
+    await this.deleteMediaKeys(id, this.collectMediaKeys(deletedPost));
 
-    if (imageKeys.length > 0) {
-      try {
-        await this.uploadsService.deleteFiles(imageKeys);
-      } catch (error) {
-        this.logger.warn(
-          `Failed to delete S3 media for post ${id}: ${error instanceof Error ? error.message : error}`,
-        );
+    return deletedPost;
+  }
+
+  // Every bucket object a post references: inline Markdown images in all
+  // three content locales, plus the per-locale cover URLs.
+  private collectMediaKeys(post: {
+    content: string;
+    contentEn: string | null;
+    contentEs: string | null;
+    coverUrl: string | null;
+    coverUrlEn: string | null;
+    coverUrlEs: string | null;
+  }): string[] {
+    const keys = new Set<string>();
+
+    for (const content of [post.content, post.contentEn, post.contentEs]) {
+      if (!content) {
+        continue;
+      }
+
+      for (const key of this.uploadsService.extractBucketKeysFromContent(
+        content,
+      )) {
+        keys.add(key);
       }
     }
 
-    return deletedPost;
+    for (const url of [post.coverUrl, post.coverUrlEn, post.coverUrlEs]) {
+      const key = this.uploadsService.extractBucketKeyFromUrl(url);
+
+      if (key) {
+        keys.add(key);
+      }
+    }
+
+    return [...keys];
+  }
+
+  private async deleteMediaKeys(postId: string, keys: string[]) {
+    if (keys.length === 0) {
+      return;
+    }
+
+    try {
+      await this.uploadsService.deleteFiles(keys);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to delete S3 media for post ${postId}: ${error instanceof Error ? error.message : error}`,
+      );
+    }
   }
 }

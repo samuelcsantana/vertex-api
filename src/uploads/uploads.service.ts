@@ -28,6 +28,16 @@ export class UploadsService {
     return { presignedUrl, fileKey };
   }
 
+  // For plain URL fields (covers) that the Markdown pattern above can
+  // never match — returns the bucket key, or null for foreign/absent URLs.
+  extractBucketKeyFromUrl(url: string | null | undefined): string | null {
+    if (url?.startsWith(this.storage.publicUrlPrefix)) {
+      return url.slice(this.storage.publicUrlPrefix.length);
+    }
+
+    return null;
+  }
+
   extractBucketKeysFromContent(content: string): string[] {
     const matches = [...content.matchAll(MARKDOWN_IMAGE_URL_PATTERN)];
 
