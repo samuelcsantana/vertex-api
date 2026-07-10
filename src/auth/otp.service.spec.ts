@@ -202,10 +202,18 @@ describe('OtpService — verifyCode', () => {
     await service.verifyCode(email, code);
 
     const [inserted] = userInsertValues.mock.calls[0] as [
-      { email: string; passwordHash: string; role: string },
+      {
+        email: string;
+        passwordHash: string;
+        role: string;
+        displayName: string;
+      },
     ];
     expect(inserted.email).toBe(email);
     expect(inserted.role).toBe('user');
+    // Public identity defaults to the email local-part — comments must
+    // never show a generic "User" nor the raw address.
+    expect(inserted.displayName).toBe('visitor');
     // passwordHash is NOT NULL in the schema — passwordless users get a
     // random argon2-hashed throwaway, never an empty value.
     expect(inserted.passwordHash).toMatch(/^\$argon2/);

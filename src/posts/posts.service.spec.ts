@@ -387,7 +387,9 @@ describe('PostsService', () => {
         deleteFiles,
       });
 
-      await service.update('post-1', { coverUrl: 'https://bucket/new-cover.png' });
+      await service.update('post-1', {
+        coverUrl: 'https://bucket/new-cover.png',
+      });
 
       expect(deleteFiles).toHaveBeenCalledWith(['old-cover.png']);
     });
@@ -544,7 +546,9 @@ describe('PostsService', () => {
       const extractBucketKeysFromContent = jest
         .fn()
         .mockImplementation((content: string) =>
-          content === 'es-body' ? ['shared.png', 'es-only.png'] : ['shared.png'],
+          content === 'es-body'
+            ? ['shared.png', 'es-only.png']
+            : ['shared.png'],
         );
       const deleteFiles = jest.fn().mockResolvedValue(undefined);
       const { service } = createService({

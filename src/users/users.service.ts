@@ -1,17 +1,21 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { desc, eq } from 'drizzle-orm';
 import { DatabaseService } from '../database/database.service';
+import { UploadsService } from '../uploads/uploads.service';
 import { comments, posts, users } from '../database/schema';
 import { ErrorCode } from '../common/constants/error-codes';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 const safeColumns = {
   id: true,
   email: true,
   name: true,
+  displayName: true,
   avatarUrl: true,
   githubId: true,
   role: true,
@@ -26,6 +30,7 @@ const safeReturning = {
   id: users.id,
   email: users.email,
   name: users.name,
+  displayName: users.displayName,
   avatarUrl: users.avatarUrl,
   githubId: users.githubId,
   role: users.role,
@@ -35,7 +40,12 @@ const safeReturning = {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly databaseService: DatabaseService) {}
+  private readonly logger = new Logger(UsersService.name);
+
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly uploadsService: UploadsService,
+  ) {}
 
   async findAll() {
     return this.databaseService.db.query.users.findMany({
@@ -82,6 +92,55 @@ export class UsersService {
   // the platform's content integrity, not about who is doing the deleting.
   async removeSelf(id: string) {
     return this.deleteUserAndCascadeComments(id);
+  }
+
+  // Self-service profile edit — like removeSelf, identity comes from the
+  // token (controller passes request.user.sub), never a path param.
+  async updateSelf(id: string, updateProfileDto: UpdateProfileDto) {
+    const existing = await this.databaseService.db.query.users.findFirst({
+      where: eq(users.id, id),
+    });
+
+    if (!existing) {
+      throw new NotFoundException('User not found');
+    }
+
+    // "" means "clear my avatar" (the form always sends a string).
+    const nextAvatarUrl =
+      updateProfileDto.avatarUrl === ''
+        ? null
+        : (updateProfileDto.avatarUrl ?? existing.avatarUrl);
+
+    const [updated] = await this.databaseService.db
+      .update(users)
+      .set({
+        name: updateProfileDto.name ?? existing.name,
+        displayName: updateProfileDto.displayName ?? existing.displayName,
+        avatarUrl: nextAvatarUrl,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, id))
+      .returning(safeReturning);
+
+    // A replaced/cleared bucket-hosted avatar is orphaned otherwise — same
+    // try/warn policy as post media cleanup: never fail the write over it.
+    if (existing.avatarUrl && existing.avatarUrl !== updated.avatarUrl) {
+      const oldKey = this.uploadsService.extractBucketKeyFromUrl(
+        existing.avatarUrl,
+      );
+
+      if (oldKey) {
+        try {
+          await this.uploadsService.deleteFiles([oldKey]);
+        } catch (error) {
+          this.logger.warn(
+            `Failed to delete old avatar for user ${id}: ${error instanceof Error ? error.message : error}`,
+          );
+        }
+      }
+    }
+
+    return updated;
   }
 
   private async deleteUserAndCascadeComments(id: string) {

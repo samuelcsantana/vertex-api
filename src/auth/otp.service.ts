@@ -135,7 +135,15 @@ export class OtpService {
 
       [user] = await this.databaseService.db
         .insert(users)
-        .values({ email, passwordHash, role })
+        .values({
+          email,
+          passwordHash,
+          role,
+          // Passwordless signups have no OAuth profile to take a name
+          // from — default the public identity to the email local-part so
+          // comments never show a generic "User" nor the raw address.
+          displayName: email.split('@')[0],
+        })
         .returning();
     }
 

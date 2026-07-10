@@ -19,8 +19,14 @@ export const users = pgTable('users', {
   email: varchar('email').notNull().unique(),
   passwordHash: varchar('password_hash').notNull(),
   name: varchar('name'),
+  // How the user wants to be shown publicly — wins over `name` everywhere
+  // a visitor-facing surface renders an identity (displayName ?? name).
+  // OTP first-logins default it to the email local-part so comments never
+  // show a generic "User" nor the raw email.
+  displayName: varchar('display_name'),
   avatarUrl: text('avatar_url'),
   githubId: text('github_id').unique(),
+  googleId: text('google_id').unique(),
   isBanned: boolean('is_banned').default(false).notNull(),
   role: userRoleEnum('role').default('user').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),

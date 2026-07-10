@@ -54,6 +54,8 @@ export class AuthService {
       .values({
         email: registerDto.email,
         passwordHash,
+        // Same public-identity default as OTP signups (see OtpService).
+        displayName: registerDto.email.split('@')[0],
       })
       .returning({ id: users.id, email: users.email });
 
@@ -157,6 +159,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       name: user.name,
+      displayName: user.displayName,
       avatarUrl: user.avatarUrl,
       githubId: user.githubId,
     };

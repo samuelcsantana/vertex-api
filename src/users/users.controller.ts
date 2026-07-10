@@ -15,6 +15,8 @@ import { AdminGuard } from '../auth/guards/admin.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { setBannedSchema } from './dto/set-banned.dto';
 import type { SetBannedDto } from './dto/set-banned.dto';
+import { updateProfileSchema } from './dto/update-profile.dto';
+import type { UpdateProfileDto } from './dto/update-profile.dto';
 import { UsersService } from './users.service';
 
 @ApiTags('users')
@@ -42,6 +44,17 @@ export class UsersController {
       setBannedDto.isBanned,
       request.user!.sub,
     );
+  }
+
+  // Same declaration-order and no-AdminGuard reasoning as DELETE /me
+  // below: self-service profile editing is every user's own right.
+  @Patch('me')
+  async updateSelf(
+    @Body(new ZodValidationPipe(updateProfileSchema))
+    updateProfileDto: UpdateProfileDto,
+    @Req() request: FastifyRequest,
+  ) {
+    return this.usersService.updateSelf(request.user!.sub, updateProfileDto);
   }
 
   // Declared before the :id route below — Nest matches routes in

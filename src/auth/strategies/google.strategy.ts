@@ -77,9 +77,15 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     let user: typeof users.$inferSelect;
 
     if (existingUser) {
+      // Fill-if-missing, never overwrite: a returning user may have edited
+      // their name/avatar on /profile, and a login must not clobber that
+      // (same policy as the GitHub strategy's linkToExistingUser).
       [user] = await this.databaseService.db
         .update(users)
-        .set({ name, avatarUrl })
+        .set({
+          name: existingUser.name ?? name,
+          avatarUrl: existingUser.avatarUrl ?? avatarUrl,
+        })
         .where(eq(users.id, existingUser.id))
         .returning();
     } else {
