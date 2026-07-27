@@ -72,6 +72,13 @@ export const posts = pgTable('posts', {
   contentEn: text('content_en'),
   contentEs: text('content_es'),
   isPublished: boolean('is_published').default(false).notNull(),
+  // null while the post is a draft — stamped once, the moment isPublished
+  // first flips to true (see PostsService.create/update), and never
+  // overwritten again so a later unpublish/republish keeps showing the
+  // original publish date instead of the republish date. createdAt stays
+  // the true (immutable) row-creation time even for drafts; this is the
+  // separate "went live" date the public site actually displays.
+  publishedAt: timestamp('published_at'),
   allowComments: boolean('allow_comments').default(true).notNull(),
   // Cover image is per locale, same fallback rule as title/content: a
   // locale without its own cover serves the pt one. Localized because
