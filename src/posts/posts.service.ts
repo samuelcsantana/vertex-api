@@ -82,7 +82,11 @@ export class PostsService {
       .transaction(async (tx) => {
         const [createdPost] = await tx
           .insert(posts)
-          .values({ ...postData, authorId })
+          .values({
+            ...postData,
+            authorId,
+            publishedAt: postData.isPublished ? new Date() : null,
+          })
           .returning();
 
         if (topicIds && topicIds.length > 0) {
@@ -105,9 +109,13 @@ export class PostsService {
   }
 
   async findAllPublished() {
+    // The public listing orders by when a post actually went live, not
+    // when its row was first created — a post drafted weeks before
+    // publishing shouldn't jump to the top of "recent posts" the day it's
+    // finally published, nor should it sort by its old draft date either.
     const results = await this.databaseService.db.query.posts.findMany({
       where: eq(posts.isPublished, true),
-      orderBy: desc(posts.createdAt),
+      orderBy: desc(posts.publishedAt),
       ...postWithTopicsQuery,
     });
 
@@ -168,11 +176,22 @@ export class PostsService {
       throw new NotFoundException('Post not found');
     }
 
+    // Only stamp publishedAt the first time a post goes live — if it's
+    // already set, a later edit (even one that re-sends isPublished: true)
+    // must not overwrite it, so unpublish-then-republish keeps showing the
+    // original publish date rather than today's.
+    const shouldStampPublishedAt =
+      !existingPost.publishedAt && postData.isPublished === true;
+
     const updatedPost = await this.databaseService.db
       .transaction(async (tx) => {
         const [updated] = await tx
           .update(posts)
-          .set({ ...postData, updatedAt: new Date() })
+          .set({
+            ...postData,
+            updatedAt: new Date(),
+            ...(shouldStampPublishedAt ? { publishedAt: new Date() } : {}),
+          })
           .where(eq(posts.id, id))
           .returning();
 
