@@ -58,6 +58,36 @@
         ]
       }
     },
+    "/auth/otp/request": {
+      "post": {
+        "operationId": "AuthController_requestOtp",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Email a passwordless sign-in code",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/auth/otp/verify": {
+      "post": {
+        "operationId": "AuthController_verifyOtp",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "summary": "Verify an emailed sign-in code and receive an access token",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
     "/auth/profile": {
       "get": {
         "operationId": "AuthController_getProfile",
@@ -88,6 +118,26 @@
           }
         },
         "summary": "Redirect to Google OAuth2 consent screen",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
+    "/auth/google/link": {
+      "get": {
+        "operationId": "AuthController_googleLink",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access_token": []
+          }
+        ],
+        "summary": "Start linking a Google account to the logged-in user",
         "tags": [
           "Auth"
         ]
@@ -297,6 +347,20 @@
     "/uploads/presigned-url": {
       "post": {
         "operationId": "UploadsController_generatePresignedUrl",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Uploads"
+        ]
+      }
+    },
+    "/uploads/avatar-presigned-url": {
+      "post": {
+        "operationId": "UploadsController_generateAvatarPresignedUrl",
         "parameters": [],
         "responses": {
           "201": {
@@ -548,6 +612,34 @@
         ]
       }
     },
+    "/users/{userId}/comments": {
+      "get": {
+        "operationId": "CommentsController_findAllForAuthor",
+        "parameters": [
+          {
+            "name": "userId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access_token": []
+          }
+        ],
+        "tags": [
+          "comments"
+        ]
+      }
+    },
     "/comments/{commentId}": {
       "delete": {
         "operationId": "CommentsController_remove",
@@ -655,6 +747,23 @@
       }
     },
     "/users/me": {
+      "patch": {
+        "operationId": "UsersController_updateSelf",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access_token": []
+          }
+        ],
+        "tags": [
+          "users"
+        ]
+      },
       "delete": {
         "operationId": "UsersController_removeSelf",
         "parameters": [],
@@ -698,6 +807,46 @@
         ],
         "tags": [
           "users"
+        ]
+      },
+      "get": {
+        "operationId": "UsersController_findOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "access_token": []
+          }
+        ],
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "HealthController_check",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "health"
         ]
       }
     }

@@ -12,6 +12,7 @@ import { TopicsModule } from './topics/topics.module';
 import { CommentsModule } from './comments/comments.module';
 import { AboutModule } from './about/about.module';
 import { UsersModule } from './users/users.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { UsersModule } from './users/users.module';
     CommentsModule,
     AboutModule,
     UsersModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [
