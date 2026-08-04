@@ -7,9 +7,36 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
       POSTGRES_DB: ${POSTGRES_DB:-vertex_api}
     ports:
-      - '5432:5432'
+      # Host-side port only — 5432 collides with sibling repos' own Postgres
+      # containers, which all default to 5432 on the host too. The internal
+      # container port stays 5432; only the host mapping moves to 5435.
+      - '5435:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-vertex_api}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Overrides whatever .env has for these two — .env's DATABASE_URL
+      # points at the deployed (Neon) database, but the containerized app
+      # must talk to the postgres service above instead. Compose's
+      # `environment` takes precedence over `env_file` for the same key.
+      PORT: 3020
+      DATABASE_URL: postgresql://${POSTGRES_USER:-user}:${POSTGRES_PASSWORD:-password}@postgres:5432/${POSTGRES_DB:-vertex_api}
+    ports:
+      - '3020:3020'
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   postgres_data:

@@ -37,13 +37,13 @@ The NestJS backend for **[samuelsantana.dev](https://samuelsantana.dev)**, a per
 ```bash
 npm install
 cp .env.example .env       # fill in the values you need — see below
-docker compose up -d       # starts local Postgres on :5432
+docker compose up -d postgres   # starts local Postgres on :5435 (only the postgres service — see Docker below)
 npm run db:push            # applies the Drizzle schema
 npm run db:seed            # seeds default topics + About content
 npm run start:dev
 ```
 
-The API listens on `:3333` by default. Swagger UI is at `http://localhost:3333/docs`.
+The API listens on `:3020` by default. Swagger UI is at `http://localhost:3020/docs`.
 
 ### Other scripts
 
@@ -55,6 +55,23 @@ npm run test:e2e     # e2e tests
 npm run test:cov     # coverage report
 npm run db:generate  # generate a new Drizzle migration from schema changes
 ```
+
+## Docker
+
+This repo pairs with [vertex-web](https://github.com/samuelcsantana/vertex-web) (the frontend, on port `3021`) — the two run side by side in local dev with a collision-free port scheme against other sibling repos on this machine:
+
+| Service | Port |
+| --- | --- |
+| `api` | 3020 |
+| `postgres` (host-side only; container listens on 5432) | 5435 |
+
+```bash
+docker compose up -d --build
+```
+
+This builds and starts both the `api` and `postgres` services (`api` waits for `postgres`'s healthcheck before starting). To run only the database and keep using `npm run start:dev` for the app with hot reload, use `docker compose up -d postgres` instead — see the Setup section above.
+
+Migrations are **not** run automatically on container start — there's no migration step in the image's `CMD`. Apply the Drizzle schema manually against whatever `DATABASE_URL` you're targeting with `npm run db:push`.
 
 ## Testing
 
