@@ -36,6 +36,6 @@ COPY --chown=node:node package.json ./
 
 USER node
 
-EXPOSE 3333
+EXPOSE 3020
 
 CMD ["node", "dist/src/main.js"]
