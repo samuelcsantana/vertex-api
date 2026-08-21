@@ -86,7 +86,7 @@ describe('AuthService — OAuth exchange codes', () => {
   });
 });
 
-describe('AuthService — register/login/getProfile', () => {
+describe('AuthService — register/login/toProfile', () => {
   // Real argon2 throughout this block, deliberately not mocked: the whole
   // point of these tests is confirming a wrong password is actually
   // rejected and a right one actually accepted, which a mocked hash/verify
@@ -186,37 +186,45 @@ describe('AuthService — register/login/getProfile', () => {
     });
   });
 
-  describe('getProfile', () => {
-    it('returns the profile shape for an existing user', async () => {
-      const findFirst = jest.fn().mockResolvedValue({
-        id: 'user-1',
-        email: 'user@example.com',
-        role: 'admin',
-        name: 'Test User',
-        avatarUrl: null,
-        githubId: 'gh-1',
-      });
+  describe('toProfile', () => {
+    const row = {
+      id: 'user-1',
+      email: 'user@example.com',
+      role: 'admin',
+      name: 'Test User',
+      displayName: 'Testy',
+      avatarUrl: null,
+      githubId: 'gh-1',
+      googleId: null,
+    } as unknown as Parameters<AuthService['toProfile']>[0];
+
+    it('returns the profile shape for a row the caller already has', () => {
+      const findFirst = jest.fn();
       const service = createService(findFirst);
 
-      const profile = await service.getProfile('user-1');
+      const profile = service.toProfile(row);
 
       expect(profile).toEqual({
         sub: 'user-1',
         email: 'user@example.com',
         role: 'admin',
         name: 'Test User',
+        displayName: 'Testy',
         avatarUrl: null,
         githubId: 'gh-1',
+        googleId: null,
       });
+      // The point of the change: no second lookup on a primary key the guard
+      // already resolved.
+      expect(findFirst).not.toHaveBeenCalled();
     });
 
-    it('throws NotFoundException for a user that does not exist', async () => {
-      const findFirst = jest.fn().mockResolvedValue(undefined);
-      const service = createService(findFirst);
+    it('throws NotFoundException when the row is gone', () => {
+      // A token outlives the account it names — deleting your own account does
+      // not invalidate the cookie already in your browser.
+      const service = createService(jest.fn());
 
-      await expect(service.getProfile('missing-user')).rejects.toThrow(
-        NotFoundException,
-      );
+      expect(() => service.toProfile(undefined)).toThrow(NotFoundException);
     });
   });
 });

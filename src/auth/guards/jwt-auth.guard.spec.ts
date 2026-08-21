@@ -8,6 +8,7 @@ function createContext(cookies: Record<string, string> = {}) {
   const request: {
     cookies: Record<string, string>;
     user?: JwtPayload;
+    currentUser?: unknown;
   } = { cookies };
 
   const context = {
@@ -87,8 +88,30 @@ describe('JwtAuthGuard', () => {
   it('allows a valid token even when the user row is not found (best-effort ban check)', async () => {
     const findFirst = jest.fn().mockResolvedValue(undefined);
     const guard = createGuard({ findFirst });
-    const { context } = createContext({ access_token: 'valid.jwt.token' });
+    const { context, request } = createContext({
+      access_token: 'valid.jwt.token',
+    });
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
+    // Undefined rather than absent, so a handler reading it gets "the row is
+    // gone" instead of stale data from somewhere else.
+    expect(request.currentUser).toBeUndefined();
+  });
+
+  it('publishes the row it read, so handlers do not query the same id again', async () => {
+    // This lookup runs on every authenticated request and only isBanned was
+    // ever read from it. Handlers needing current user data were issuing an
+    // identical findFirst on the same primary key a moment later — measured at
+    // ~240ms of the ~740ms a signed-in GET /auth/profile took.
+    const row = { id: 'user-1', email: 'user@example.com', isBanned: false };
+    const findFirst = jest.fn().mockResolvedValue(row);
+    const guard = createGuard({ findFirst });
+    const { context, request } = createContext({
+      access_token: 'valid.jwt.token',
+    });
+
+    await expect(guard.canActivate(context)).resolves.toBe(true);
+    expect(request.currentUser).toBe(row);
+    expect(findFirst).toHaveBeenCalledTimes(1);
   });
 });
