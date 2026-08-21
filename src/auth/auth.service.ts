@@ -141,15 +141,22 @@ export class AuthService {
     }
   }
 
-  async getProfile(userId: string) {
-    // Re-fetched from the DB on every call rather than read off the JWT
-    // payload: githubId can change mid-session (account linking doesn't
-    // reissue the token), so the payload would otherwise report stale
-    // linked-account state until the user's next login.
-    const user = await this.databaseService.db.query.users.findFirst({
-      where: eq(users.id, userId),
-    });
-
+  /**
+   * The public shape of a user, built from a row the caller already has.
+   *
+   * Takes the row rather than an id on purpose. It used to take an id and do
+   * its own findFirst, which meant every call ran a second query on a primary
+   * key JwtAuthGuard had just looked up to check isBanned — measured at ~240ms
+   * of the ~740ms a signed-in GET /auth/profile took.
+   *
+   * Still DB data rather than JWT claims, and that part has not changed: the
+   * payload is frozen at issue time, so githubId would report stale
+   * linked-account state until the user's next login. The row is current; it
+   * simply does not need to be fetched twice.
+   */
+  toProfile(user: typeof users.$inferSelect | undefined) {
+    // A token can outlive the account it names — deleting your own account
+    // does not invalidate the cookie already in your browser.
     if (!user) {
       throw new NotFoundException('User not found');
     }

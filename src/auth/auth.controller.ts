@@ -114,7 +114,9 @@ export class AuthController {
   @ApiCookieAuth('access_token')
   @ApiOperation({ summary: 'Get current user profile' })
   getProfile(@Req() request: FastifyRequest) {
-    return this.authService.getProfile(request.user!.sub);
+    // JwtAuthGuard already read this row to check isBanned; reusing it is what
+    // keeps this endpoint down to one query instead of two.
+    return this.authService.toProfile(request.currentUser);
   }
 
   @Get('google')
