@@ -106,6 +106,17 @@ See [`.env.example`](./.env.example) for the full, documented list. The ones mos
 | `DATABASE_URL`, `JWT_SECRET`, `COOKIE_SECRET` | Required at boot; the app throws immediately if `COOKIE_SECRET` is missing. |
 | `GOOGLE_CALLBACK_URL`, `GITHUB_CALLBACK_URL` | Registered with each provider's OAuth app config — these still point at *this* API's own domain even with the Token Callback Pattern in place, since only what happens *after* the callback succeeds changed. |
 | `ADMIN_EMAIL` | The one address that gets `role: 'admin'` on first login/registration — everyone else is `role: 'user'`. |
+| `THROTTLER_DDB_TABLE`, `THROTTLER_DDB_REGION` | Where rate-limit counters live. Unset keeps them in the API process — see below. |
+
+### Rate-limit counters and the second instance
+
+`@nestjs/throttler` counts in memory by default, which makes every configured limit a **per-process** limit. On one instance that is exactly right. On two, each one grants the full budget on its own, so `POST /auth/login`'s 5-per-minute becomes 10 — and which instance answers is the load balancer's business, not the attacker's problem.
+
+Setting `THROTTLER_DDB_TABLE` moves the counters into DynamoDB and makes the limits mean what they say across instances. It is off by default because it is not free: the throttler guard runs on **every** route, so a shared counter adds a network round trip to every request, blog page views included. That is cheap when the table is in the same region as the app and expensive when it is not — which is why the deployment decides rather than the code.
+
+The table needs a single partition key `pk` (string) and TTL enabled on the `expiresAt` attribute. **Provisioned** capacity keeps it inside the always-free tier (25 read and 25 write units); on-demand does not. TTL is only garbage collection here — DynamoDB deletes expired items "typically within two days" and serves them in reads until it does, so the window is enforced against a timestamp in the item, never by the item's absence.
+
+If the table cannot be reached, requests are **allowed** rather than refused. Failing closed would take the public blog down over a dependency that exists only to bound abuse; the reasoning is written out in `dynamodb-throttler-storage.ts`.
 
 ## Architecture notes
 
