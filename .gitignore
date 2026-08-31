@@ -40,7 +40,12 @@ lerna-debug.log*
 !.vscode/extensions.json
 
 # Agent instructions and planning docs — kept on disk, never pushed.
-# Matches cygnus / cygnus-api / vertex-web, where docs/ was untracked on 19/08/2026.
+# Matches cygnus / cygnus-api / vertex-web, where docs/
+
+# Same reasoning for the agent instructions themselves: they describe how to work
+# on this repository, not what it does, and they were the only thing in this
+# category still being published.
+.claude/ was untracked on 19/08/2026.
 # Consequence: a code comment or README that says "see docs/x.md" is a dead pointer
 # for anyone reading this repo on GitHub. Comments must carry their own reasoning.
 docs/
