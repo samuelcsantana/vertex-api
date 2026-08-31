@@ -118,6 +118,14 @@ The table needs a single partition key `pk` (string) and TTL enabled on the `exp
 
 If the table cannot be reached, requests are **allowed** rather than refused. Failing closed would take the public blog down over a dependency that exists only to bound abuse; the reasoning is written out in `dynamodb-throttler-storage.ts`.
 
+### What a rate limit counts against
+
+`@nestjs/throttler` keys its counters on `request.ip`, which with `trustProxy: true` is the **leftmost** entry of `X-Forwarded-For`. Behind a CDN that is a value the caller picks: CloudFront *appends* the viewer's address to whatever `X-Forwarded-For` arrived rather than replacing it, so a request carrying `X-Forwarded-For: 1.2.3.4` is counted as 1.2.3.4 — and one that sends a fresh value each time is never counted twice. Every per-IP budget in the app becomes decorative, `/auth/login` included, and sharing the counters between instances does not help: they would be sharing a number that means nothing.
+
+So the address comes from `CloudFront-Viewer-Address` instead, which CloudFront generates and overwrites — a viewer that sends its own is ignored — but only for requests that have proved they came through the CDN, using the same `EDGE_SHARED_SECRET` the edge check uses. With no secret configured there is no CDN in front, `X-Forwarded-For` is as trustworthy as it ever was, and `request.ip` stands.
+
+**The distribution has to forward that header.** CloudFront's `AllViewer` origin request policy does **not** include `CloudFront-*` headers; use one that does, or add the header explicitly. If it is missing while the shared secret says the CDN is in front, the app logs a warning once and falls back to the spoofable value — the configuration is wrong, and silence would hide it.
+
 ## Architecture notes
 
 - **Auth guards compose, they don't duplicate logic.** `JwtAuthGuard` verifies the token and populates `request.user`; `AdminGuard` just reads `request.user.role` — it always runs after `JwtAuthGuard` in the guard chain, never standalone.

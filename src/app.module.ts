@@ -13,6 +13,7 @@ import { CommentsModule } from './comments/comments.module';
 import { AboutModule } from './about/about.module';
 import { UsersModule } from './users/users.module';
 import { HealthModule } from './health/health.module';
+import { createClientTracker } from './common/throttler/client-tracker';
 import { createThrottlerStorage } from './common/throttler/throttler-storage.factory';
 
 @Module({
@@ -21,10 +22,18 @@ import { createThrottlerStorage } from './common/throttler/throttler-storage.fac
     // via the APP_GUARD below unless overridden with @Throttle(...) on a
     // specific handler (see login/register in auth.controller.ts).
     //
-    // Where those counts are kept is decided by the environment, not here.
-    // In-memory is the default and is correct for one process; point
-    // THROTTLER_DDB_TABLE at a DynamoDB table and the same limits start being
-    // counted across every instance instead of once per instance.
+    // Two things about that sentence are decided elsewhere, and both have to
+    // be right for the limit to mean anything.
+    //
+    // *Where* the counts are kept is chosen by the environment, not here:
+    // in-memory by default, which is correct for one process, and DynamoDB
+    // when THROTTLER_DDB_TABLE points at a table — the same limits counted
+    // across every instance instead of once per instance.
+    //
+    // *What* they are counted against is the other half. The default answer,
+    // request.ip, stops being usable behind a CDN, where it is a value the
+    // caller can set. Counters shared across instances would then be sharing
+    // a number that means nothing. See createClientTracker.
     ThrottlerModule.forRoot({
       throttlers: [
         {
@@ -34,6 +43,7 @@ import { createThrottlerStorage } from './common/throttler/throttler-storage.fac
         },
       ],
       storage: createThrottlerStorage(),
+      getTracker: createClientTracker(),
     }),
     DatabaseModule,
     AuthModule,
