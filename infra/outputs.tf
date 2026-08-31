@@ -9,3 +9,13 @@ output "ecr_repository_url" {
   description = "Push target for the Lambda container image built by Dockerfile.lambda."
   value       = aws_ecr_repository.api.repository_url
 }
+
+output "lambda_function_url" {
+  description = "Publicly resolvable, by necessity — a function URL behind CloudFront cannot use origin access control without breaking every browser POST. EDGE_SHARED_SECRET is what makes reaching it directly useless."
+  value       = aws_lambda_function_url.api.function_url
+}
+
+output "lambda_execution_role_arn" {
+  description = "The identity the function runs as. It reads its own parameters and signs uploads for one bucket; nothing else."
+  value       = aws_iam_role.lambda.arn
+}
