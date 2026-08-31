@@ -161,6 +161,40 @@ can't know the visitor's locale.
   build needs adding to Jest's transform allowlist. `auth.e2e-spec.ts` cleans up the users it
   creates in its own `afterAll`.
 
+## Code conventions
+
+Controllers handle HTTP and nothing else — routing, DTO validation, response mapping. Business
+logic lives in services. Guard clauses instead of nested conditionals, small focused functions,
+names that carry their own meaning. Errors are centralised in exception filters; a stack trace
+never reaches a client.
+
+Dependency inversion is applied at external boundaries **and nowhere else**, and that limit is the
+point. `ObjectStorage` (`src/uploads/storage/`) is the seam for S3: `UploadsService` keeps the
+domain logic — key naming, Markdown parsing — and depends on the abstraction, `S3ObjectStorage` is
+bound in `UploadsModule`'s providers, and unit tests inject a fake rather than faking AWS
+environment variables.
+
+Drizzle deliberately gets **no** repository-interface layer on top of it: one database, no
+variation axis, and the ORM is already the abstraction. Tests that need a database fake build a
+chainable stand-in for `databaseService.db` by hand — see `otp.service.spec.ts`. Do not introduce
+a repository layer to make testing easier; it has been considered and rejected.
+
+## Error responses a visitor sees
+
+Any error that surfaces in vertex-web's UI must carry a machine-readable `code` from
+`src/common/constants/error-codes.ts` next to its English `message`:
+
+```ts
+throw new UnauthorizedException({
+  message: 'Invalid credentials',
+  code: ErrorCode.InvalidCredentials,
+});
+```
+
+vertex-web translates the code per locale and mirrors this list in its own
+`src/lib/api-error-codes.ts`. Adding a code here without adding it there leaves the visitor with
+an untranslated fallback, and nothing fails to make that visible.
+
 ## Environment variables
 
 See `.env.example` for the full list. Notable ones: `FRONTEND_URL` (drives CORS and the OAuth
