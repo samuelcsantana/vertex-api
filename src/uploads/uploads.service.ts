@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 import { ObjectStorage } from './storage/object-storage';
 
 const MARKDOWN_IMAGE_URL_PATTERN = /!\[.*?\]\((https:\/\/[^\s)]+)\)/g;
@@ -18,7 +18,7 @@ export class UploadsService {
     const folder = `blog-media/${date.getFullYear()}-${String(
       date.getMonth() + 1,
     ).padStart(2, '0')}`;
-    const fileKey = `${folder}/${uuidv4()}-${fileName}`;
+    const fileKey = `${folder}/${randomUUID()}-${fileName}`;
 
     const presignedUrl = await this.storage.createPresignedUploadUrl(
       fileKey,
@@ -36,7 +36,7 @@ export class UploadsService {
     fileName: string,
     contentType: string,
   ) {
-    const fileKey = `avatars/${userId}/${uuidv4()}-${fileName}`;
+    const fileKey = `avatars/${userId}/${randomUUID()}-${fileName}`;
 
     const presignedUrl = await this.storage.createPresignedUploadUrl(
       fileKey,

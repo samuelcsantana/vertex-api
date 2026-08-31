@@ -22,7 +22,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
@@ -46,12 +46,13 @@ jobs:
       # only runs on machines that have run `npm install` with hooks
       # enabled — this job catches anything committed via --no-verify, a
       # missing local setup, or a hook that was never installed.
-      # secretlint-rule-preset-recommend requires Node >=22; the other jobs
-      # in this repo stay on 20 since nothing else here needs it yet.
+      # secretlint-rule-preset-recommend requires Node >=22, which used to be
+      # the reason this job differed from the rest. It no longer differs: every
+      # job and both images are on 24 now.
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
