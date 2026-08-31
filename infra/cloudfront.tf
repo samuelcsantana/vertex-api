@@ -11,13 +11,19 @@
 # the app falls back to the spoofable one and says so in its logs.
 resource "aws_cloudfront_origin_request_policy" "all_viewer_and_address" {
   name    = "${var.project}-all-viewer-and-viewer-address"
-  comment = "Everything the viewer sent, plus CloudFront's own record of the viewer's address, which is what per-IP rate limits are counted against."
+  comment = "All viewer headers plus CloudFront-Viewer-Address, which rate limits are keyed on."
 
   headers_config {
-    header_behavior = "allViewerAndWhitelistCloudFront"
+    # allExcept, not allViewer, and the exception is Host.
+    #
+    # A Lambda function URL answers only to its own hostname. Forward the
+    # viewer's Host and it rejects the request before the application sees
+    # it — a 403 whose body is {"Message":null}, which looks nothing like
+    # this app's own 403 and is easy to misread as the edge guard working.
+    header_behavior = "allExcept"
 
     headers {
-      items = ["CloudFront-Viewer-Address"]
+      items = ["Host"]
     }
   }
 
@@ -68,8 +74,13 @@ resource "aws_cloudfront_distribution" "api" {
     # The value is a placeholder here and is written out of band, for the same
     # reason the SSM secrets are: a real value in this file would be a real
     # value in the state file.
+    #
+    # The name is not x-edge-anything: CloudFront reserves the X-Edge-* prefix
+    # and rejects the distribution outright — "The parameter HeaderName :
+    # x-edge-secret is not allowed" — rather than failing later at request
+    # time.
     custom_header {
-      name  = "x-edge-secret"
+      name  = "x-origin-verify"
       value = "placeholder-set-out-of-band"
     }
   }

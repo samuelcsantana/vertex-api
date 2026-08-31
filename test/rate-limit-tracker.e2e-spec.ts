@@ -33,7 +33,7 @@ describe('Rate limit tracking behind a CDN (e2e)', () => {
   const login = (viewerAddress: string) =>
     request(app.getHttpServer())
       .post('/auth/login')
-      .set('x-edge-secret', SECRET)
+      .set('x-origin-verify', SECRET)
       .set('x-forwarded-for', FORGED_FORWARDED_FOR)
       .set('cloudfront-viewer-address', viewerAddress)
       .send({ email: 'nonexistent@example.com', password: 'wrong' });
