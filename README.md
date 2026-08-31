@@ -134,6 +134,23 @@ When this API runs behind a CDN whose origin is publicly resolvable — a Lambda
 
 Unset, every request is accepted. That is correct for local development, for the e2e suite, and for a deployment with nothing in front of it — and it is the thing to remember to set on the day a distribution appears, because an unset secret makes that distribution decorative.
 
+### Infrastructure
+
+`infra/` is the Terraform for the AWS side of this service. Two things about how it is wired are worth knowing before running it.
+
+**Terraform assumes a role rather than being one.** The identity that runs it — a local IAM user, or a GitHub OIDC identity in CI — is allowed to do exactly one thing: assume `vertex-api-terraform`. Every permission lives on that role, and the role's policy is scoped to resources named `vertex-api*` rather than to `*`, so a leaked credential is worth an hour of one project rather than an account. The `provisioning_identity` output exists to make that visible: if it ever reads as a user or the account root instead of an assumed role, the wiring has come undone.
+
+**State is in S3, and the bucket is not managed here.** Terraform needs somewhere to keep state before it has ever run, so the bucket was created out of band — versioned, encrypted, public access blocked, TLS-only — and deliberately left out of the configuration. State that can destroy the bucket holding it is a loop worth not being in.
+
+```bash
+cd infra
+export AWS_PROFILE=vertex-api-deployer   # the identity allowed to assume the role
+terraform init
+terraform plan
+```
+
+CI checks formatting and validity with `-backend=false`, which needs no credentials. A plan needs the account and is run by hand.
+
 ## Architecture notes
 
 - **Auth guards compose, they don't duplicate logic.** `JwtAuthGuard` verifies the token and populates `request.user`; `AdminGuard` just reads `request.user.role` — it always runs after `JwtAuthGuard` in the guard chain, never standalone.
