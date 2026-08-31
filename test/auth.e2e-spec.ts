@@ -5,6 +5,7 @@ import request from 'supertest';
 import { createTestApp } from './utils/create-test-app';
 import { DatabaseService } from '../src/database/database.service';
 import { users } from '../src/database/schema';
+import { AuthService } from '../src/auth/auth.service';
 
 // Runs against a real, unmocked backend — matching how this project's
 // frontend E2E suite works too. Needs a real Postgres reachable via
@@ -129,6 +130,42 @@ describe('Auth (e2e)', () => {
         .send({});
 
       expect(response.status).toBe(400);
+    });
+
+    // The OAuth callback that normally mints a code needs a real provider
+    // round trip, so the code is minted straight from the service here. That
+    // is enough to exercise the half these tests exist for: the code now
+    // lives in Postgres, and it is Postgres — not the API process — that has
+    // to enforce single use. A code minted in this process being spendable at
+    // all is also the property that broke when it lived in a Map.
+    it('exchanges a real minted code for a token, exactly once', async () => {
+      // The user is inserted directly rather than registered over HTTP: the
+      // register route is rate limited to 5/60s per IP, and every spec in this
+      // suite shares one process and one counter under --runInBand, so going
+      // through the endpoint makes this test's outcome depend on how many
+      // other tests ran first.
+      const databaseService = moduleFixture.get(DatabaseService);
+      const [user] = await databaseService.db
+        .insert(users)
+        .values({ email: uniqueEmail(), passwordHash: 'not-a-real-hash' })
+        .returning({ id: users.id });
+
+      const authService = moduleFixture.get(AuthService);
+      const code = await authService.createOAuthExchangeCode(user.id);
+
+      const first = await request(app.getHttpServer())
+        .post('/auth/exchange')
+        .send({ code });
+
+      expect(first.status).toBe(200);
+      const issued = first.body as { access_token?: string };
+      expect(typeof issued.access_token).toBe('string');
+
+      const second = await request(app.getHttpServer())
+        .post('/auth/exchange')
+        .send({ code });
+
+      expect(second.status).toBe(401);
     });
   });
 

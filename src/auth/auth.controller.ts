@@ -203,7 +203,10 @@ export class AuthController {
     return this.handleOAuthCallback(request, res);
   }
 
-  private handleOAuthCallback(request: FastifyRequest, res: FastifyReply) {
+  private async handleOAuthCallback(
+    request: FastifyRequest,
+    res: FastifyReply,
+  ) {
     // vertex-web and vertex-api are on different domains (Vercel vs Render),
     // so a cookie set here would be scoped to this API's own domain and the
     // frontend's cookies() calls could never see it — no amount of polling
@@ -216,7 +219,15 @@ export class AuthController {
     // Referer headers, or a proxy's access log. The frontend trades this
     // code for the real token server-to-server via POST /auth/exchange,
     // immediately after which the code stops working.
-    const code = this.authService.createOAuthExchangeCode(request.user!);
+    //
+    // Minting the code is a database write now rather than a Map assignment,
+    // so it can fail — inside a popup, where a raw error page is the only
+    // thing the visitor would ever see. OAuthPopupExceptionFilter is what
+    // turns that into a closed popup and a login the frontend reports as
+    // failed, and this is the first path that can actually reach it.
+    const code = await this.authService.createOAuthExchangeCode(
+      request.user!.sub,
+    );
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:3000';
 
     return res.redirect(

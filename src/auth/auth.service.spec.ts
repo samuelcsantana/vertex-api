@@ -3,46 +3,145 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { createHash } from 'crypto';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { AuthService } from './auth.service';
 import { DatabaseService } from '../database/database.service';
-import { JwtPayload } from './interfaces/jwt-payload.interface';
 
 describe('AuthService — OAuth exchange codes', () => {
-  let service: AuthService;
-  let signAsync: jest.Mock;
-
-  const payload: JwtPayload = {
-    sub: 'user-1',
+  const storedUser = {
+    id: 'user-1',
     email: 'user@example.com',
-    role: 'user',
+    role: 'user' as const,
     name: 'Test User',
     avatarUrl: null,
   };
 
-  beforeEach(() => {
-    signAsync = jest.fn().mockResolvedValue('fake.jwt.token');
-    const jwtService = { signAsync } as unknown as JwtService;
-    const databaseService = {} as DatabaseService;
+  // Independent re-implementation of the service's hashing, so a failure here
+  // means the scheme changed rather than both sides drifting together.
+  function hashOf(code: string): string {
+    return createHash('sha256').update(code).digest('hex');
+  }
 
-    service = new AuthService(databaseService, jwtService);
-  });
+  /**
+   * A fake standing in for the one table this flow touches.
+   *
+   * It keeps whatever the service inserted and hands that same row back to the
+   * DELETE ... RETURNING, then forgets it — which is what lets the TTL tests
+   * assert against the expiry the service itself computed instead of one the
+   * test made up. What it cannot model is the part that now lives in Postgres:
+   * that two simultaneous exchanges of one code produce exactly one winner is
+   * a property of the DELETE, not of this class, and is covered in the e2e
+   * suite against a real database.
+   */
+  function createService(options: {
+    user?: typeof storedUser | undefined;
+    pruneError?: Error;
+  }) {
+    const user = 'user' in options ? options.user : storedUser;
+
+    let row: { codeHash: string; userId: string; expiresAt: Date } | null =
+      null;
+
+    const insertValues = jest.fn((values: typeof row) => {
+      row = values;
+      return Promise.resolve(undefined);
+    });
+    const insert = jest.fn().mockReturnValue({ values: insertValues });
+
+    const returning = jest.fn(() => {
+      const consumed = row;
+      row = null;
+      return Promise.resolve(consumed ? [consumed] : []);
+    });
+
+    // The service awaits this object directly when pruning and calls
+    // .returning() on it when consuming a code, so it has to be both a
+    // thenable and a builder.
+    const where = jest.fn(() => ({
+      returning,
+      then: (
+        onFulfilled?: (value: unknown) => unknown,
+        onRejected?: (reason: unknown) => unknown,
+      ) =>
+        (options.pruneError
+          ? Promise.reject(options.pruneError)
+          : Promise.resolve(undefined)
+        ).then(onFulfilled, onRejected),
+    }));
+    const del = jest.fn().mockReturnValue({ where });
+
+    const userFindFirst = jest.fn().mockResolvedValue(user);
+    const signAsync = jest.fn().mockResolvedValue('fake.jwt.token');
+
+    const databaseService = {
+      db: {
+        query: { users: { findFirst: userFindFirst } },
+        insert,
+        delete: del,
+      },
+    } as unknown as DatabaseService;
+    const jwtService = { signAsync } as unknown as JwtService;
+
+    return {
+      service: new AuthService(databaseService, jwtService),
+      insertValues,
+      signAsync,
+      userFindFirst,
+    };
+  }
 
   afterEach(() => {
     jest.useRealTimers();
   });
 
   it('exchanges a freshly minted code for a real access token', async () => {
-    const code = service.createOAuthExchangeCode(payload);
+    const { service, signAsync } = createService({});
+
+    const code = await service.createOAuthExchangeCode(storedUser.id);
     const token = await service.exchangeOAuthCode(code);
 
     expect(token).toBe('fake.jwt.token');
-    expect(signAsync).toHaveBeenCalledWith(payload);
+    expect(signAsync).toHaveBeenCalledWith({
+      sub: 'user-1',
+      email: 'user@example.com',
+      role: 'user',
+      name: 'Test User',
+      avatarUrl: null,
+    });
+  });
+
+  it('stores only a hash of the code, never the code itself', async () => {
+    const { service, insertValues } = createService({});
+
+    const code = await service.createOAuthExchangeCode(storedUser.id);
+
+    const stored = insertValues.mock.calls[0][0]!;
+    expect(stored.codeHash).toBe(hashOf(code));
+    expect(JSON.stringify(stored)).not.toContain(code);
+  });
+
+  it('builds the token from the user row as it stands at exchange time', async () => {
+    // The reason the row holds a user id instead of a frozen payload: the
+    // account was promoted after the code was minted, and the token has to
+    // say so. Freezing the payload would issue a seven-day token describing
+    // the user as they were up to a minute earlier.
+    const { service, signAsync, userFindFirst } = createService({});
+    userFindFirst.mockResolvedValue({ ...storedUser, role: 'admin' });
+
+    const code = await service.createOAuthExchangeCode(storedUser.id);
+    await service.exchangeOAuthCode(code);
+
+    expect(signAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ role: 'admin' }),
+    );
   });
 
   it('is single-use: exchanging the same code twice fails the second time', async () => {
-    const code = service.createOAuthExchangeCode(payload);
+    const { service } = createService({});
+
+    const code = await service.createOAuthExchangeCode(storedUser.id);
     await service.exchangeOAuthCode(code);
 
     await expect(service.exchangeOAuthCode(code)).rejects.toThrow(
@@ -51,6 +150,8 @@ describe('AuthService — OAuth exchange codes', () => {
   });
 
   it('rejects a code that was never issued', async () => {
+    const { service } = createService({});
+
     await expect(service.exchangeOAuthCode('never-issued')).rejects.toThrow(
       UnauthorizedException,
     );
@@ -58,7 +159,8 @@ describe('AuthService — OAuth exchange codes', () => {
 
   it('rejects a code after its 60-second TTL has elapsed', async () => {
     jest.useFakeTimers();
-    const code = service.createOAuthExchangeCode(payload);
+    const { service } = createService({});
+    const code = await service.createOAuthExchangeCode(storedUser.id);
 
     jest.advanceTimersByTime(60_001);
 
@@ -69,7 +171,8 @@ describe('AuthService — OAuth exchange codes', () => {
 
   it('still accepts a code just under the TTL', async () => {
     jest.useFakeTimers();
-    const code = service.createOAuthExchangeCode(payload);
+    const { service } = createService({});
+    const code = await service.createOAuthExchangeCode(storedUser.id);
 
     jest.advanceTimersByTime(59_000);
 
@@ -78,11 +181,33 @@ describe('AuthService — OAuth exchange codes', () => {
     );
   });
 
-  it('issues a different code on every call, even for the same payload', () => {
-    const codeA = service.createOAuthExchangeCode(payload);
-    const codeB = service.createOAuthExchangeCode(payload);
+  it('rejects a code whose account no longer exists', async () => {
+    const { service } = createService({ user: undefined });
+
+    const code = await service.createOAuthExchangeCode(storedUser.id);
+
+    await expect(service.exchangeOAuthCode(code)).rejects.toThrow(
+      UnauthorizedException,
+    );
+  });
+
+  it('issues a different code on every call, even for the same user', async () => {
+    const { service } = createService({});
+
+    const codeA = await service.createOAuthExchangeCode(storedUser.id);
+    const codeB = await service.createOAuthExchangeCode(storedUser.id);
 
     expect(codeA).not.toBe(codeB);
+  });
+
+  it('still returns a code when pruning expired ones fails', async () => {
+    // Pruning is housekeeping. Letting its failure escape would turn a
+    // successful sign-in into a 500 inside an OAuth popup.
+    const { service } = createService({ pruneError: new Error('db down') });
+
+    await expect(
+      service.createOAuthExchangeCode(storedUser.id),
+    ).resolves.toEqual(expect.any(String));
   });
 });
 

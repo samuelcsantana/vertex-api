@@ -33,17 +33,40 @@ export const users = pgTable('users', {
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 
-// Pending passwordless-login codes. In Postgres rather than the in-memory
-// Map the OAuth exchange codes use: an OTP lives 10 minutes and must
-// survive a Render restart/deploy, unlike the 60-second exchange code.
-// email is unique — one active code per address; a new request replaces
-// the previous row.
+// Pending passwordless-login codes. Like the OAuth exchange codes above,
+// these live in Postgres rather than in the API process: an OTP has to
+// survive a restart or a deploy, and it has to be findable by whichever
+// process handles the verify request. email is unique — one active code per
+// address; a new request replaces the previous row.
 export const emailOtps = pgTable('email_otps', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: varchar('email').notNull().unique(),
   codeHash: varchar('code_hash').notNull(),
   expiresAt: timestamp('expires_at').notNull(),
   attempts: integer('attempts').default(0).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+// Codes the OAuth popup carries back to the frontend, traded for a real
+// access token over POST /auth/exchange. In Postgres and not in a Map in the
+// API process: the request that mints a code and the one that spends it are
+// two separate HTTP calls, so any deployment running more than one process
+// can land them in different memory. That failure is intermittent and
+// invisible locally, which is the worst combination there is.
+//
+// The row holds the user id, not a frozen token payload, so the token is
+// built from the current row when the code is spent — a role changed inside
+// the 60-second window cannot ride into a token that lives for seven days.
+export const oauthExchangeCodes = pgTable('oauth_exchange_codes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  // SHA-256 of the code, never the code itself: a leaked row does not contain
+  // the value a caller has to present. Unique because the hash is what the
+  // exchange looks the row up by.
+  codeHash: varchar('code_hash').notNull().unique(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  expiresAt: timestamp('expires_at').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
