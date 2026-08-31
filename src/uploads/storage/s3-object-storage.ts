@@ -23,9 +23,9 @@ export class S3ObjectStorage extends ObjectStorage {
     const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
     const bucketName = process.env.AWS_S3_BUCKET_NAME;
 
-    if (!region || !accessKeyId || !secretAccessKey || !bucketName) {
+    if (!region || !bucketName) {
       throw new Error(
-        'Missing required AWS environment variables: AWS_REGION, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_S3_BUCKET_NAME',
+        'Missing required AWS environment variables: AWS_REGION, AWS_S3_BUCKET_NAME',
       );
     }
 
@@ -33,7 +33,15 @@ export class S3ObjectStorage extends ObjectStorage {
     this.publicUrlPrefix = `https://${bucketName}.s3.${region}.amazonaws.com/`;
     this.s3Client = new S3Client({
       region,
-      credentials: { accessKeyId, secretAccessKey },
+      // A key pair is required where there is no other identity — a container
+      // on Render is nobody until it is handed one — and must be left out
+      // where there is: on Lambda the execution role is the identity, and
+      // supplying static keys as well would be two answers to one question,
+      // with the long-lived one winning. Both are still required together;
+      // half a pair is a typo, not a configuration.
+      ...(accessKeyId && secretAccessKey
+        ? { credentials: { accessKeyId, secretAccessKey } }
+        : {}),
     });
   }
 

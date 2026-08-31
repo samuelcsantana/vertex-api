@@ -134,6 +134,14 @@ When this API runs behind a CDN whose origin is publicly resolvable — a Lambda
 
 Unset, every request is accepted. That is correct for local development, for the e2e suite, and for a deployment with nothing in front of it — and it is the thing to remember to set on the day a distribution appears, because an unset secret makes that distribution decorative.
 
+### Where configuration comes from
+
+Locally, from `.env` and the shell. On Lambda, from **SSM Parameter Store**: set `CONFIG_PARAMETER_PREFIX` to a path prefix and everything under it is read into `process.env` once per execution environment, before the app is built.
+
+The reason is not how the values are read but where they end up. A value set as a Lambda environment variable has to come from somewhere — hardcoded in the Terraform, or read by Terraform and written to the function — and either way it lands in the state file, which becomes a copy of every secret sitting in a bucket nobody thinks of as holding secrets. Reading them at runtime means Terraform creates the parameters and never learns their contents.
+
+Anything already present in the environment wins over the store, so a single value can be overridden for a debug run without writing to it. With no prefix configured the loader does nothing at all, which is what keeps `npm run start:dev` and the e2e suite untouched.
+
 ### Infrastructure
 
 `infra/` is the Terraform for the AWS side of this service. Two things about how it is wired are worth knowing before running it.

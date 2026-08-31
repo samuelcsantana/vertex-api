@@ -6,6 +6,7 @@ import {
 import awsLambdaFastify, { PromiseHandler } from '@fastify/aws-lambda';
 import { AppModule } from './app.module';
 import { configureApp } from './bootstrap';
+import { loadConfigFromParameterStore } from './config/parameter-store';
 
 // The package declares both a promise-returning and a callback-style handler
 // as overloads, and ReturnType picks the last one. Naming the promise form is
@@ -28,6 +29,12 @@ type LambdaHandler = PromiseHandler;
 let bootstrapping: Promise<LambdaHandler> | null = null;
 
 async function build(): Promise<LambdaHandler> {
+  // Before anything reads process.env, and that ordering is load-bearing:
+  // AuthModule throws at import time when JWT_SECRET is missing, and
+  // configureApp throws without COOKIE_SECRET. Both would fail here as a
+  // cold start that never becomes a request.
+  await loadConfigFromParameterStore();
+
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     // Still required, and for the same reason as in main.ts, but the proxy
