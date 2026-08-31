@@ -73,6 +73,8 @@ This builds and starts both the `api` and `postgres` services (`api` waits for `
 
 Migrations are **not** run automatically on container start — there's no migration step in the image's `CMD`. Apply the Drizzle schema manually against whatever `DATABASE_URL` you're targeting with `npm run db:push`.
 
+**Point `db:push` at the direct database host, not the pooled one.** In production `DATABASE_URL` is Neon's pooled endpoint (the hostname carrying a `-pooler` suffix), which is PgBouncer in transaction mode. That is the right endpoint for the running app and the wrong one for a schema migration: migration tooling leans on session-level state that a connection handed back to the pool after every transaction does not keep. Run migrations against the direct hostname — the same connection string with `-pooler` removed — and leave the pooled one to the app.
+
 ## Testing
 
 Two layers:
