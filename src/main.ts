@@ -12,10 +12,13 @@ async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     // trustProxy: without it, Fastify reads the raw socket address as the
-    // client IP — behind Render's own reverse proxy, that's Render's proxy
-    // IP for every single request, not the real visitor's. Per-IP rate
-    // limiting would then bucket all traffic together instead of actually
-    // distinguishing abusive clients.
+    // client IP, which behind any reverse proxy is the proxy's address on
+    // every single request rather than the visitor's. Per-IP rate limiting
+    // would then bucket all traffic into one.
+    //
+    // This is the entry point for a long-lived server — local development,
+    // and any container host. The serverless entry point sets the same flag
+    // for a different proxy and does not stop there; see lambda.ts.
     new FastifyAdapter({ trustProxy: true }),
   );
 
