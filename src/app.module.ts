@@ -13,19 +13,28 @@ import { CommentsModule } from './comments/comments.module';
 import { AboutModule } from './about/about.module';
 import { UsersModule } from './users/users.module';
 import { HealthModule } from './health/health.module';
+import { createThrottlerStorage } from './common/throttler/throttler-storage.factory';
 
 @Module({
   imports: [
     // Global default: 100 requests per IP per 60s, applied to every route
     // via the APP_GUARD below unless overridden with @Throttle(...) on a
     // specific handler (see login/register in auth.controller.ts).
-    ThrottlerModule.forRoot([
-      {
-        name: 'default',
-        ttl: 60_000,
-        limit: 100,
-      },
-    ]),
+    //
+    // Where those counts are kept is decided by the environment, not here.
+    // In-memory is the default and is correct for one process; point
+    // THROTTLER_DDB_TABLE at a DynamoDB table and the same limits start being
+    // counted across every instance instead of once per instance.
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          name: 'default',
+          ttl: 60_000,
+          limit: 100,
+        },
+      ],
+      storage: createThrottlerStorage(),
+    }),
     DatabaseModule,
     AuthModule,
     PostsModule,
