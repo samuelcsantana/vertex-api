@@ -39,17 +39,17 @@ lerna-debug.log*
 !.vscode/launch.json
 !.vscode/extensions.json
 
-# Agent instructions and planning docs — kept on disk, never pushed.
-# Matches cygnus / cygnus-api / vertex-web, where docs/
-
-# Same reasoning for the agent instructions themselves: they describe how to work
-# on this repository, not what it does, and they were the only thing in this
-# category still being published.
-.claude/
-CLAUDE.md was untracked on 19/08/2026.
-# Consequence: a code comment or README that says "see docs/x.md" is a dead pointer
-# for anyone reading this repo on GitHub. Comments must carry their own reasoning.
+# Agent instructions and planning docs — kept on disk, never pushed. They say how
+# to work on this repository rather than what it does, which is no use to anyone
+# reading it on GitHub. Matches cygnus / cygnus-api / vertex-web, where docs/ was
+# untracked on 19/08/2026.
+#
+# Consequence, and it is the reason this is worth stating here: a code comment or
+# README that says "see CLAUDE.md" or "see docs/x.md" is a dead pointer for
+# everyone outside this working copy. Comments must carry their own reasoning.
 docs/
+CLAUDE.md
+.claude/
 
 # Terraform
 infra/.terraform/
