@@ -6,8 +6,11 @@
 // provider binding), so consumers never name a concrete implementation.
 //
 // Deliberately NOT a template for the rest of the codebase: Drizzle gets no
-// repository-interface layer on top of it — one database, no variation
-// axis, the ORM is already the abstraction (see .claude/CLAUDE.md).
+// repository-interface layer on top of it. There is one database and no
+// second implementation anyone is waiting for, so an interface over it would
+// name the same thing twice; the ORM is already the abstraction. Tests that
+// need a database fake build a chainable stand-in for databaseService.db by
+// hand — see otp.service.spec.ts.
 export abstract class ObjectStorage {
   /**
    * Absolute URL prefix (with trailing slash) that publicly served objects
