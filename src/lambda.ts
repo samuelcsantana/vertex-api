@@ -4,7 +4,6 @@ import {
   NestFastifyApplication,
 } from '@nestjs/platform-fastify';
 import awsLambdaFastify, { PromiseHandler } from '@fastify/aws-lambda';
-import { AppModule } from './app.module';
 import { configureApp } from './bootstrap';
 import { loadConfigFromParameterStore } from './config/parameter-store';
 
@@ -29,11 +28,29 @@ type LambdaHandler = PromiseHandler;
 let bootstrapping: Promise<LambdaHandler> | null = null;
 
 async function build(): Promise<LambdaHandler> {
-  // Before anything reads process.env, and that ordering is load-bearing:
-  // AuthModule throws at import time when JWT_SECRET is missing, and
-  // configureApp throws without COOKIE_SECRET. Both would fail here as a
-  // cold start that never becomes a request.
   await loadConfigFromParameterStore();
+
+  // Imported here rather than at the top of the file, and that is the entire
+  // reason the line above is worth anything.
+  //
+  // A static import is evaluated when *this* module is loaded, before any
+  // function in it runs. AuthModule throws at import time when JWT_SECRET is
+  // missing, and app.module.ts also decides where rate-limit counters live
+  // and what they are keyed on while its decorator is evaluated. With a
+  // static import, all of that happens against an empty environment and the
+  // parameters arrive afterwards, to a process that has already concluded it
+  // has no configuration.
+  //
+  // That is not hypothetical: it is how the first deploy of this function
+  // failed — "JWT_SECRET environment variable is not defined", thrown from
+  // app.module.js requiring auth.module.js, while the loader that would have
+  // provided it had not been reached yet.
+  // The .js suffix is required by moduleResolution: nodenext, which treats a
+  // dynamic import as ESM even in a CommonJS file and resolves it against the
+  // emitted filename rather than the source one.
+  const { AppModule } = (await import('./app.module.js')) as {
+    AppModule: new () => unknown;
+  };
 
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
