@@ -32,7 +32,7 @@ describe('Edge origin guard (e2e)', () => {
   it('serves a request carrying the shared secret', async () => {
     const response = await request(app.getHttpServer())
       .get('/health')
-      .set('x-edge-secret', SECRET);
+      .set('x-origin-verify', SECRET);
 
     expect(response.status).toBe(200);
   });
@@ -40,7 +40,7 @@ describe('Edge origin guard (e2e)', () => {
   it('refuses a request carrying the wrong secret', async () => {
     const response = await request(app.getHttpServer())
       .get('/health')
-      .set('x-edge-secret', 'not-the-secret');
+      .set('x-origin-verify', 'not-the-secret');
 
     expect(response.status).toBe(403);
   });

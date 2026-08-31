@@ -8,11 +8,17 @@ import { timingSafeEqual } from 'crypto';
 import type { FastifyRequest } from 'fastify';
 
 /**
- * The header CloudFront is configured to add to every request it forwards to
- * the origin. Fastify lower-cases incoming header names, so this is compared
+ * The header the CDN is configured to add to every request it forwards to the
+ * origin. Fastify lower-cases incoming header names, so this is compared
  * against the already-normalized form.
+ *
+ * Not `x-edge-...`, which is what this was called first. CloudFront reserves
+ * the whole `X-Edge-*` prefix for itself and refuses to create a distribution
+ * carrying one as a custom origin header — "The parameter HeaderName :
+ * x-edge-secret is not allowed", at creation time rather than at request time.
+ * `x-origin-verify` is the name AWS uses in its own guidance for this pattern.
  */
-export const EDGE_SECRET_HEADER = 'x-edge-secret';
+export const EDGE_SECRET_HEADER = 'x-origin-verify';
 
 export const EDGE_SHARED_SECRET = Symbol('EDGE_SHARED_SECRET');
 

@@ -1,8 +1,14 @@
 import { Logger } from '@nestjs/common';
 import { timingSafeEqual } from 'crypto';
 
-/** Set by the CDN on every request it forwards; proves the request is its. */
-export const EDGE_SECRET_HEADER = 'x-edge-secret';
+/**
+ * Set by the CDN on every request it forwards; proves the request is its.
+ * Must stay identical to the constant in edge-origin.guard.ts — the guard
+ * decides whether a request is let in, this decides whether its claimed
+ * address is believed, and a rename in one place would quietly turn the
+ * second half back into the spoofable path.
+ */
+export const EDGE_SECRET_HEADER = 'x-origin-verify';
 
 /**
  * CloudFront's own record of who it is answering, as `address:port`. It is a

@@ -70,3 +70,9 @@ variable "plain_parameters" {
     GITHUB_CALLBACK_URL = "https://api.samuelsantana.dev/auth/github/callback"
   }
 }
+
+variable "api_domain" {
+  description = "Domain this service answers on. A Lambda function URL cannot carry a custom domain by itself, which is the reason CloudFront is in front of it at all."
+  type        = string
+  default     = "api.samuelsantana.dev"
+}
