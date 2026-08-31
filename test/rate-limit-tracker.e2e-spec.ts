@@ -57,24 +57,25 @@ describe('Rate limit tracking behind a CDN (e2e)', () => {
     expect(other.status).toBe(401);
   });
 
-  it('ignores a viewer address offered without the shared secret', async () => {
-    // Otherwise the header the fix depends on becomes the bypass it was meant
-    // to close: the origin is publicly resolvable, so anyone reaching it
-    // directly could name their own viewer address.
-    const attempt = () =>
-      request(app.getHttpServer())
-        .post('/auth/login')
-        .set('x-forwarded-for', '7.7.7.7')
-        .set('cloudfront-viewer-address', `198.51.100.${Date.now() % 250}:1`)
-        .send({ email: 'nonexistent@example.com', password: 'wrong' });
+  it('never reaches the limiter at all without the shared secret', async () => {
+    // A viewer address offered by someone who did not come through the CDN is
+    // the bypass this whole mechanism would otherwise create: the origin is
+    // publicly resolvable, so anyone reaching it directly could name their own
+    // viewer and mint themselves a fresh budget per request.
+    //
+    // Two independent things stop that, and this asserts the outer one.
+    // EdgeOriginGuard turns the request away before any counting happens, so
+    // what comes back is 403 rather than a rate-limit answer. The inner one —
+    // the tracker refusing to believe a viewer address that arrives without
+    // the secret, even if it is somehow handed one — is covered in
+    // client-tracker.spec.ts, and matters precisely because it does not depend
+    // on the guard still running first.
+    const response = await request(app.getHttpServer())
+      .post('/auth/login')
+      .set('x-forwarded-for', '7.7.7.7')
+      .set('cloudfront-viewer-address', '198.51.100.42:1')
+      .send({ email: 'nonexistent@example.com', password: 'wrong' });
 
-    const results = await Promise.all(Array.from({ length: 6 }, attempt));
-    const statuses = results.map((r) => r.status);
-
-    // Every one of these claims a different viewer, so if the header were
-    // believed here they would all be answered. They are not: without the
-    // secret the count falls back to X-Forwarded-For, which is the same on
-    // all six.
-    expect(statuses.filter((s) => s === 429).length).toBe(1);
+    expect(response.status).toBe(403);
   });
 });

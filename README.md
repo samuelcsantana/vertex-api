@@ -126,6 +126,14 @@ So the address comes from `CloudFront-Viewer-Address` instead, which CloudFront 
 
 **The distribution has to forward that header.** CloudFront's `AllViewer` origin request policy does **not** include `CloudFront-*` headers; use one that does, or add the header explicitly. If it is missing while the shared secret says the CDN is in front, the app logs a warning once and falls back to the spoofable value — the configuration is wrong, and silence would hide it.
 
+### Proving a request came through the CDN
+
+When this API runs behind a CDN whose origin is publicly resolvable — a Lambda function URL is, and cannot be closed with origin access control without breaking every browser `POST` — anyone who finds the origin hostname can bypass whatever the distribution enforces.
+
+`EDGE_SHARED_SECRET` closes that. Configure the CDN to send the same value as an `x-edge-secret` origin header on every request, and the API answers `403` to anything arriving without it. This is not user authentication; it is the origin declining to talk to callers who cannot show they are the edge — the same shape of trust as `trustProxy`, which believes a forwarded client IP only because a proxy it trusts put it there.
+
+Unset, every request is accepted. That is correct for local development, for the e2e suite, and for a deployment with nothing in front of it — and it is the thing to remember to set on the day a distribution appears, because an unset secret makes that distribution decorative.
+
 ## Architecture notes
 
 - **Auth guards compose, they don't duplicate logic.** `JwtAuthGuard` verifies the token and populates `request.user`; `AdminGuard` just reads `request.user.role` — it always runs after `JwtAuthGuard` in the guard chain, never standalone.
