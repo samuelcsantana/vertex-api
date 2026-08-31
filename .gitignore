@@ -44,3 +44,11 @@ lerna-debug.log*
 # Consequence: a code comment or README that says "see docs/x.md" is a dead pointer
 # for anyone reading this repo on GitHub. Comments must carry their own reasoning.
 docs/
+
+# Terraform
+infra/.terraform/
+infra/.terraform.lock.hcl.bak
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log

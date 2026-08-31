@@ -28,3 +28,34 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Infrastructure is code, and code that only ever runs on one laptop is not
+  # reviewed. This job needs no AWS credentials: -backend=false skips the S3
+  # state entirely, which is what lets a fork's pull request be checked too.
+  # It catches the two things that are pure text — bad HCL and unformatted
+  # files — and nothing about the account, which is what a plan would need.
+  terraform:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: infra
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.8
+          terraform_wrapper: false
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive
+
+      - name: Initialize without the remote state
+        run: terraform init -backend=false -input=false
+
+      - name: Validate
+        run: terraform validate
