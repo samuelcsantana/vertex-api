@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
+import { postgresClientOptions } from './postgres-options';
 import * as schema from './schema';
 import { slugify } from '../common/utils/slugify.util';
 
@@ -87,7 +88,7 @@ async function seed() {
     throw new Error('DATABASE_URL environment variable is not defined');
   }
 
-  const client = postgres(connectionString);
+  const client = postgres(connectionString, postgresClientOptions);
   const db = drizzle(client, { schema });
 
   try {

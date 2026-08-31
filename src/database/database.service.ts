@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { drizzle, PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres, { Sql } from 'postgres';
+import { postgresClientOptions } from './postgres-options';
 import * as schema from './schema';
 
 @Injectable()
@@ -21,7 +22,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       throw new Error('DATABASE_URL environment variable is not defined');
     }
 
-    this.client = postgres(connectionString);
+    this.client = postgres(connectionString, postgresClientOptions);
     this.db = drizzle(this.client, { schema });
 
     this.logger.log('Database connection established');
