@@ -58,13 +58,17 @@ async function build(): Promise<LambdaHandler> {
     // being trusted is a different one: the visitor's address arrives in
     // X-Forwarded-For from the function URL rather than on the socket.
     //
-    // This is the one thing here that cannot be confirmed without a real
-    // deployment, and it is load-bearing — every per-IP rate limit is only as
-    // good as the address Fastify resolves. With a CDN in front of the
-    // function URL that header carries more than one hop, so what has to be
-    // checked against the deployed stack is that `request.ip` is the
-    // visitor's and not an edge node's. A limit keyed on an edge node is one
-    // global bucket wearing a per-IP disguise.
+    // Measured against the deployed stack rather than assumed, because every
+    // per-IP rate limit rests on it. Two answers came back. The address here
+    // does come from X-Forwarded-For — eight logins from one forwarded
+    // address earned a 429 while the first from another was served. And that
+    // address is not safe to count against: CloudFront appends to
+    // X-Forwarded-For rather than replacing it, so its leftmost entry, which
+    // is what `request.ip` resolves to, is a value the caller chose.
+    //
+    // So this flag stays for everything that reads request.ip, and the rate
+    // limiter deliberately does not: it counts against
+    // CloudFront-Viewer-Address instead. See createClientTracker.
     new FastifyAdapter({ trustProxy: true }),
   );
 
