@@ -68,6 +68,11 @@ variable "plain_parameters" {
     # for where this is going.
     GOOGLE_CALLBACK_URL = "https://api.samuelsantana.dev/auth/google/callback"
     GITHUB_CALLBACK_URL = "https://api.samuelsantana.dev/auth/github/callback"
+
+    # Turns the shared counters on. The app reads this at cold start; unset,
+    # it counts per execution environment — which on Lambda means per
+    # concurrent request, and therefore barely at all.
+    THROTTLER_DDB_TABLE = "vertex-api-throttler"
   }
 }
 

@@ -46,19 +46,19 @@ export function createThrottlerStorage(): ThrottlerStorage | undefined {
     );
   }
 
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-
-  const client = new DynamoDBClient({
-    region,
-    // Static keys only when both are present. Left out, the SDK falls back to
-    // its own credential chain, which is what picks up an execution role —
-    // the form this app will have when it stops being a long-lived process
-    // with environment variables baked into a dashboard.
-    ...(accessKeyId && secretAccessKey
-      ? { credentials: { accessKeyId, secretAccessKey } }
-      : {}),
-  });
+  // No credentials passed, deliberately, and this file learned it the
+  // expensive way. It used to hand the client AWS_ACCESS_KEY_ID and
+  // AWS_SECRET_ACCESS_KEY read from the environment — which the SDK's own
+  // default chain already does, and does better, because it also reads
+  // AWS_SESSION_TOKEN.
+  //
+  // A Lambda execution role arrives as all three variables. A client given
+  // only the first two signs with temporary credentials while omitting the
+  // token that makes them valid, and every call comes back "The security
+  // token included in the request is invalid" — which this storage answers by
+  // failing open, so the site stays up and the rate limit quietly does
+  // nothing. It was in production for the length of one deploy.
+  const client = new DynamoDBClient({ region });
 
   logger.log(`Rate limits are counted in DynamoDB table ${tableName}`);
 
