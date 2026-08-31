@@ -71,6 +71,14 @@ docker compose up -d --build
 
 This builds and starts both the `api` and `postgres` services (`api` waits for `postgres`'s healthcheck before starting). To run only the database and keep using `npm run start:dev` for the app with hot reload, use `docker compose up -d postgres` instead — see the Setup section above.
 
+### Two images, one application
+
+`Dockerfile` builds the long-lived server this repository has always shipped: `node dist/src/main.js`, listening on a port. `Dockerfile.lambda` packages the same application as a Lambda container image, with `src/lambda.ts` as its entry point instead of `src/main.ts`. Neither replaces the other, and both build from the same `dist/`.
+
+The difference that matters is the base image. `argon2` ships no prebuilt binary for musl, which is why the Alpine-based server image installs a C toolchain and compiles it from source. The Lambda base image is Amazon Linux — glibc — where `node-gyp-build` finds a prebuild and nothing needs compiling, so that image has no toolchain in it at all.
+
+`src/bootstrap.ts` holds what both entry points must do identically: CORS, `@fastify/cookie`, `helmet`. Those are registered imperatively, outside the Nest module system, so a plugin added to one entry point and forgotten in the other would be a difference nothing type-checks — and a missing `@fastify/cookie` means `res.setCookie` is undefined and every login silently stops setting a session. Swagger stays out of it: `SwaggerModule.createDocument` walks the whole application's metadata, which is worth doing once when a dev server starts and not worth doing on every cold start.
+
 Migrations are **not** run automatically on container start — there's no migration step in the image's `CMD`. Apply the Drizzle schema manually against whatever `DATABASE_URL` you're targeting with `npm run db:push`.
 
 **Point `db:push` at the direct database host, not the pooled one.** In production `DATABASE_URL` is Neon's pooled endpoint (the hostname carrying a `-pooler` suffix), which is PgBouncer in transaction mode. That is the right endpoint for the running app and the wrong one for a schema migration: migration tooling leans on session-level state that a connection handed back to the pool after every transaction does not keep. Run migrations against the direct hostname — the same connection string with `-pooler` removed — and leave the pooled one to the app.

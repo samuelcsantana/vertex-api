@@ -1,0 +1,47 @@
+# syntax=docker/dockerfile:1
+
+# Container image for running this API as a Lambda function. The Dockerfile
+# next to it still builds the long-lived server image; this one is a second
+# way to package the same application, not a replacement.
+#
+# Every stage is the Lambda base image rather than a plain Node one. That is
+# what makes the native module question go away: argon2 has no prebuilt binary
+# for musl, which is why the Alpine-based image next door installs a C
+# toolchain and compiles it. Amazon Linux is glibc, node-gyp-build finds a
+# prebuild, and nothing here has to be compiled — verified by installing it in
+# this exact base image, not assumed.
+
+# ---- deps: full install (dev + prod), needed to type-check and build ----
+FROM public.ecr.aws/lambda/nodejs:24 AS deps
+WORKDIR /build
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# ---- builder: compile TypeScript to dist/ ----
+FROM public.ecr.aws/lambda/nodejs:24 AS builder
+WORKDIR /build
+COPY --from=deps /build/node_modules ./node_modules
+COPY . .
+RUN npm run build
+
+# ---- prod-deps: production-only node_modules ----
+FROM public.ecr.aws/lambda/nodejs:24 AS prod-deps
+WORKDIR /build
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# ---- production: what Lambda actually runs ----
+FROM public.ecr.aws/lambda/nodejs:24 AS production
+ENV NODE_ENV=production
+
+COPY --from=prod-deps /build/node_modules ${LAMBDA_TASK_ROOT}/node_modules
+COPY --from=builder /build/dist ${LAMBDA_TASK_ROOT}/dist
+
+# Migrations are deliberately absent: drizzle/ and drizzle.config.ts ship in
+# the server image, but a function that migrated its own database on every
+# cold start would race every other concurrent environment doing the same.
+# Schema changes are applied out of band, against the direct database host.
+
+# No ENTRYPOINT — the base image's runtime interface client is the entrypoint,
+# and this names the exported handler it should call.
+CMD ["dist/src/lambda.handler"]
