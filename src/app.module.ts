@@ -13,6 +13,7 @@ import { CommentsModule } from './comments/comments.module';
 import { AboutModule } from './about/about.module';
 import { UsersModule } from './users/users.module';
 import { HealthModule } from './health/health.module';
+import { EdgeOriginGuard } from './common/edge/edge-origin.guard';
 import { createClientTracker } from './common/throttler/client-tracker';
 import { createThrottlerStorage } from './common/throttler/throttler-storage.factory';
 
@@ -59,6 +60,13 @@ import { createThrottlerStorage } from './common/throttler/throttler-storage.fac
   controllers: [AppController],
   providers: [
     AppService,
+    {
+      // Registered before the throttler on purpose: global guards run in the
+      // order they are declared, and a request that has no business reaching
+      // this origin should be turned away before it costs a rate-limit lookup.
+      provide: APP_GUARD,
+      useFactory: () => new EdgeOriginGuard(process.env.EDGE_SHARED_SECRET),
+    },
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
