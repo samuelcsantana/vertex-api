@@ -5,16 +5,18 @@
 [![Security](https://github.com/samuelcsantana/vertex-api/actions/workflows/security.yml/badge.svg)](https://github.com/samuelcsantana/vertex-api/actions/workflows/security.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-The NestJS backend for **[samuelsantana.dev](https://samuelsantana.dev)**, a personal engineering blog and technical portfolio. Serves posts, topics, comments, and auth to **[vertex-web](https://github.com/samuelcsantana/vertex-web)**, the Next.js frontend, over a REST API — deployed on a different domain (Render vs. Vercel), which shapes a few of the decisions below.
+The NestJS backend for **[samuelsantana.dev](https://samuelsantana.dev)**, a personal engineering blog and technical portfolio. Serves posts, topics, comments, and auth to **[vertex-web](https://github.com/samuelcsantana/vertex-web)**, the Next.js frontend, over a REST API on a different domain from the frontend, which shapes a few of the decisions below.
+
+It runs on **AWS Lambda in São Paulo** — a container image behind CloudFront on `api.samuelsantana.dev` — with the database in the same region. It used to run on Render in Virginia while that database was already in São Paulo, so every query crossed a continent: a primary-key lookup measured **~240 ms**. The same class of request now completes in **24–34 ms**. Moving it is what `infra/` is for.
 
 ## Highlights
 
 - **NestJS on Fastify**, not the default Express adapter — `@fastify/helmet` and `@fastify/cookie` sit directly on it.
 - **Drizzle ORM over Postgres**, prepared statements by default (no hand-built SQL strings, so no injection surface from user text).
 - **JWT sessions in an `HttpOnly` cookie**, verified — and the user re-checked for a ban flag — on every guarded request, not just at issuance.
-- **Google/GitHub OAuth via the Token Callback Pattern.** This API can't set the session cookie directly on OAuth callback: it and vertex-web live on different domains, so a cookie set here would be scoped to *this* domain, invisible to the frontend's own `cookies()` calls. Instead, the callback mints a random, single-use exchange code (60s TTL, in-memory) and redirects the popup to the frontend with the code — never the real token — in the URL. The frontend trades it for the real token via `POST /auth/exchange`, which deletes the code on first lookup regardless of validity, so a captured code can't be replayed even within its short window.
+- **Google/GitHub OAuth via the Token Callback Pattern.** This API can't set the session cookie directly on OAuth callback: it and vertex-web live on different domains, so a cookie set here would be scoped to *this* domain, invisible to the frontend's own `cookies()` calls. Instead, the callback mints a random, single-use exchange code (60s TTL, stored as a hash in Postgres) and redirects the popup to the frontend with the code — never the real token — in the URL. The frontend trades it for the real token via `POST /auth/exchange`, which deletes the code on first lookup regardless of validity, so a captured code can't be replayed even within its short window.
 - **Write access is admin-only, everywhere.** Every `POST`/`PATCH`/`DELETE` across posts, topics, about-page content, and uploads requires `JwtAuthGuard` + `AdminGuard`. Comments are the one exception by design (any logged-in visitor can post one) — but deleting one still checks `isOwner || isAdmin` in the service layer, not just "is logged in."
-- **Rate limited**, globally and per-route. 100 req/IP/60s by default (`@nestjs/throttler`, registered as `APP_GUARD`); `/auth/login` and `/auth/register` get a much tighter 5/60s, since both are direct brute-force/spam targets. `trustProxy` is enabled on the Fastify adapter so this reads the real client IP behind Render's reverse proxy instead of collapsing all traffic into one shared bucket.
+- **Rate limited**, globally and per-route, and counted somewhere the caller cannot influence. 100 req/IP/60s by default (`@nestjs/throttler` as `APP_GUARD`); `/auth/login` and `/auth/register` get a much tighter 5/60s. Two things had to be true for that to mean anything on a serverless runtime, and neither is the default: the counters live in DynamoDB rather than in a process — ten concurrent attempts against a five-per-minute route were all answered before that changed, because each one got its own execution environment — and they are keyed on `CloudFront-Viewer-Address` rather than `request.ip`, because CloudFront *appends* to `X-Forwarded-For` instead of replacing it, making its leftmost entry a value the caller picks.
 
 ## Tech stack
 
@@ -23,7 +25,7 @@ The NestJS backend for **[samuelsantana.dev](https://samuelsantana.dev)**, a per
 - Passport (Google OAuth2, GitHub, JWT strategies)
 - Zod for request validation
 - AWS S3 (presigned uploads for post cover images)
-- Swagger/OpenAPI, served at `/docs`
+- Swagger/OpenAPI, served at `/docs` by the long-lived server. The Lambda entry point deliberately leaves it out — `SwaggerModule.createDocument` walks the metadata of the whole application, which is worth doing once when a dev server starts and not on every cold start. `swagger.json` at the repo root is the checked-in snapshot of the contract.
 
 ## Getting started
 
@@ -108,11 +110,13 @@ See [`.env.example`](./.env.example) for the full, documented list. The ones mos
 | `ADMIN_EMAIL` | The one address that gets `role: 'admin'` on first login/registration — everyone else is `role: 'user'`. |
 | `THROTTLER_DDB_TABLE`, `THROTTLER_DDB_REGION` | Where rate-limit counters live. Unset keeps them in the API process — see below. |
 
-### Rate-limit counters and the second instance
+### Rate-limit counters and concurrency
 
-`@nestjs/throttler` counts in memory by default, which makes every configured limit a **per-process** limit. On one instance that is exactly right. On two, each one grants the full budget on its own, so `POST /auth/login`'s 5-per-minute becomes 10 — and which instance answers is the load balancer's business, not the attacker's problem.
+`@nestjs/throttler` counts in memory by default, which makes every configured limit a **per-process** limit. On one long-lived process that is exactly right. On a serverless runtime it is close to no limit at all: every concurrent request gets its own execution environment, and each starts its counter at zero. Ten simultaneous attempts against `POST /auth/login` — declared as five per minute — were all answered, none throttled, against this deployment. Sequential requests reuse a warm environment and are limited correctly, which is what made it easy to miss.
 
-Setting `THROTTLER_DDB_TABLE` moves the counters into DynamoDB and makes the limits mean what they say across instances. It is off by default because it is not free: the throttler guard runs on **every** route, so a shared counter adds a network round trip to every request, blog page views included. That is cheap when the table is in the same region as the app and expensive when it is not — which is why the deployment decides rather than the code.
+Setting `THROTTLER_DDB_TABLE` moves the counters into DynamoDB and makes the limits mean what they say. **It is set in production**, and the reason is not theoretical: before it was, ten simultaneous attempts against `/auth/login` — declared as five per minute — were all answered and none throttled, because each concurrent request got its own execution environment with a counter starting at zero. Sequential requests were limited correctly the whole time, which is exactly what made it easy to miss.
+
+It stays off by default in the code because the throttler guard runs on **every** route, so a shared counter adds a round trip to every request, blog page views included. That is cheap when the table is beside the app and expensive when it is not — which is why the deployment decides rather than the code. The table is provisioned at 25 read and 25 write units, the always-free allowance; if it were ever exceeded the storage fails open rather than failing the request.
 
 The table needs a single partition key `pk` (string) and TTL enabled on the `expiresAt` attribute. **Provisioned** capacity keeps it inside the always-free tier (25 read and 25 write units); on-demand does not. TTL is only garbage collection here — DynamoDB deletes expired items "typically within two days" and serves them in reads until it does, so the window is enforced against a timestamp in the item, never by the item's absence.
 
@@ -159,10 +163,41 @@ terraform plan
 
 CI checks formatting and validity with `-backend=false`, which needs no credentials. A plan needs the account and is run by hand.
 
+## Deployment
+
+```
+vertex-web (Vercel)  ──►  CloudFront  ──►  Lambda function URL  ──►  Neon Postgres
+samuelsantana.dev         api.samuelsantana.dev   │  NestJS + Fastify     │
+                                                  │  container image      │
+                                                  └── sa-east-1 ──────────┘
+                                                        (same region)
+```
+
+The certificate is the one piece that lives elsewhere: CloudFront reads certificates from `us-east-1` and nowhere else, so ACM is the only resource in this stack outside São Paulo.
+
+**Why CloudFront is here at all:** a Lambda function URL cannot carry a custom domain. That single constraint pulls in the rest.
+
+**Why the function URL is public.** Locking an origin to its distribution means origin access control, and OAC requires the *caller* to send a SHA-256 of the request body — AWS's wording is "Lambda doesn't support unsigned payloads". A browser doing `fetch` cannot produce that, so every `POST` from the site would fail: login, registration, the OAuth exchange, posting a comment. The URL therefore stays reachable, and a shared secret in an origin header is what makes reaching it useless. See [Proving a request came through the CDN](#proving-a-request-came-through-the-cdn).
+
+**Why nothing is cached.** This API authenticates with an `HttpOnly` cookie, and CloudFront's default cache policy does not put `Cookie` in the cache key — one visitor's `GET /auth/profile` would be stored and served to the next. `CachingDisabled` is a correctness requirement here, not a tuning decision left for later.
+
+Measured on the deployed stack, server-side rather than from a client:
+
+| | |
+|---|---|
+| Cold start | ~2.5 s (850 ms init + ~1.6 s to build the app, read Parameter Store and connect) |
+| `GET /health` warm | ~3 ms |
+| `GET /posts` warm, querying Postgres | 24–34 ms |
+| Memory used | 195 MB of 1024 |
+
+Memory is set well above what the function uses because on Lambda memory *is* CPU, and a cold start is bound by how fast the module graph executes. Billing is in GB-seconds, so finishing sooner at more memory can cost the same or less.
+
+Configuration is read from SSM Parameter Store at cold start rather than set as environment variables on the function — see [Where configuration comes from](#where-configuration-comes-from). Everything above is Terraform in `infra/`; see [Infrastructure](#infrastructure).
+
 ## Architecture notes
 
 - **Auth guards compose, they don't duplicate logic.** `JwtAuthGuard` verifies the token and populates `request.user`; `AdminGuard` just reads `request.user.role` — it always runs after `JwtAuthGuard` in the guard chain, never standalone.
-- **OAuth exchange codes are intentionally in-memory, not DB- or Redis-backed.** A code is only ever meant to survive a single redirect hop (a few seconds, 60s TTL as a hard ceiling) on a single-instance deployment — durability across a process restart isn't a real requirement here, and the one failure mode (a restart mid-flow) just means that one login attempt fails and the visitor retries.
+- **OAuth exchange codes live in Postgres, and used not to.** They were an in-memory `Map`, which is correct for exactly one deployment shape: a single process. The request that mints a code and the `POST /auth/exchange` that spends it are two separate HTTP calls, so anything running more than one — a second instance, the overlap of a rolling deploy, a serverless environment — can land them in different memory, and the second one finds nothing. The symptom would have been OAuth logins failing for some visitors some of the time while every local run passed. The row stores a SHA-256 of the code and the user's id, never the code itself and never a frozen token payload, so the token is rebuilt from the current row when the code is spent — a role changed inside that 60-second window cannot ride into a token that then lives for seven days.
 - **Passport strategies own their own callback URL fallback** (`GOOGLE_CALLBACK_URL ?? 'http://localhost:3333/auth/google/callback'`), so local dev works without any `.env` file at all.
 
 ## Related repository
