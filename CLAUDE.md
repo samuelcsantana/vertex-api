@@ -6,8 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The NestJS backend for samuelsantana.dev, a personal engineering blog/portfolio. Serves posts,
 topics, comments, and auth to **vertex-web** (the Next.js frontend, separate repo), over a REST
-API — deployed on a different domain (Render vs. Vercel), which shapes several decisions below
+API — deployed on a different domain from the frontend, which shapes several decisions below
 (CORS, OAuth cookie handling).
+
+**Since 31/08/2026 this runs on AWS Lambda, not on Render.** A container image in `sa-east-1`,
+behind a CloudFront distribution that serves `api.samuelsantana.dev`; the origin is a Lambda
+function URL. Configuration is read from SSM Parameter Store at cold start, not from environment
+variables on the function. Infrastructure is Terraform in `infra/`, run by a role that the local
+identity may only assume. `Dockerfile.lambda` builds that image; `Dockerfile` still builds the
+long-lived server, which is what local development and any container host use.
 
 Tech stack: NestJS on **Fastify** (Express is forbidden — not installed, don't add it), Drizzle
 ORM over PostgreSQL (not Prisma/TypeORM), Zod validation, Argon2 password hashing, JWT in an
@@ -108,10 +115,22 @@ need OAuth env vars configured.
 
 **Rate limiting.** `@nestjs/throttler` registered as `APP_GUARD` in `app.module.ts`: 100
 requests/IP/60s globally. `/auth/login` and `/auth/register` override to 5/60s via `@Throttle(...)`.
-This only reads real client IPs because `trustProxy: true` is set on the Fastify adapter in
-`main.ts` — without it, every request behind Render's reverse proxy resolves to the proxy's own IP
-and per-IP limiting collapses into one shared bucket. Re-verify this if the app ever moves behind a
-different/additional proxy layer.
+`trustProxy: true` on the Fastify adapter is what stops every request resolving to the proxy's own
+address, but **the rate limiter deliberately does not use `request.ip`**. Behind CloudFront that
+value is the leftmost `X-Forwarded-For` entry, and CloudFront *appends* to that header rather than
+replacing it — so it is a value the caller chose, and a caller sending a fresh one per request is
+never counted twice. Counters are keyed on `CloudFront-Viewer-Address` instead, which CloudFront
+generates and overwrites, and only for requests that proved they came through the CDN. See
+`src/common/throttler/client-tracker.ts`.
+
+Where the counters live is chosen by `THROTTLER_DDB_TABLE`: in-memory by default, which is correct
+for one process, and DynamoDB when set. It is currently unset, and the app says so at boot.
+
+A separate guard rejects anything that did not come through the CDN
+(`src/common/edge/edge-origin.guard.ts`): the Lambda function URL is publicly resolvable and
+cannot be closed with origin access control, because OAC requires the caller to send a SHA-256 of
+the request body and a browser doing `fetch` cannot. A shared secret in the `x-origin-verify`
+origin header is what separates the distribution from anyone else who finds the URL.
 
 **CORS.** `main.ts` derives the allowed origin from `FRONTEND_URL` — one source of truth shared
 with the OAuth redirect target. It also allows both the apex and `www.` variant of that host
@@ -141,6 +160,40 @@ can't know the visitor's locale.
   `@fastify/cookie` also needs registering outside `main.ts`'s own bootstrap, and `uuid`'s ESM
   build needs adding to Jest's transform allowlist. `auth.e2e-spec.ts` cleans up the users it
   creates in its own `afterAll`.
+
+## Code conventions
+
+Controllers handle HTTP and nothing else — routing, DTO validation, response mapping. Business
+logic lives in services. Guard clauses instead of nested conditionals, small focused functions,
+names that carry their own meaning. Errors are centralised in exception filters; a stack trace
+never reaches a client.
+
+Dependency inversion is applied at external boundaries **and nowhere else**, and that limit is the
+point. `ObjectStorage` (`src/uploads/storage/`) is the seam for S3: `UploadsService` keeps the
+domain logic — key naming, Markdown parsing — and depends on the abstraction, `S3ObjectStorage` is
+bound in `UploadsModule`'s providers, and unit tests inject a fake rather than faking AWS
+environment variables.
+
+Drizzle deliberately gets **no** repository-interface layer on top of it: one database, no
+variation axis, and the ORM is already the abstraction. Tests that need a database fake build a
+chainable stand-in for `databaseService.db` by hand — see `otp.service.spec.ts`. Do not introduce
+a repository layer to make testing easier; it has been considered and rejected.
+
+## Error responses a visitor sees
+
+Any error that surfaces in vertex-web's UI must carry a machine-readable `code` from
+`src/common/constants/error-codes.ts` next to its English `message`:
+
+```ts
+throw new UnauthorizedException({
+  message: 'Invalid credentials',
+  code: ErrorCode.InvalidCredentials,
+});
+```
+
+vertex-web translates the code per locale and mirrors this list in its own
+`src/lib/api-error-codes.ts`. Adding a code here without adding it there leaves the visitor with
+an untranslated fallback, and nothing fails to make that visible.
 
 ## Environment variables
 
