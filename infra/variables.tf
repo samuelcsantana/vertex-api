@@ -57,10 +57,14 @@ variable "plain_parameters" {
     # ResendEmailSender throws and the function never finishes starting.
     OTP_EMAIL_FROM = "no-reply@samuelsantana.dev"
 
-    # The one address that becomes an admin on first sign-in. Deliberately an
-    # address nobody owns, so an unfinished deployment cannot hand the admin
-    # role to anyone by accident.
-    ADMIN_EMAIL = "placeholder@example.com"
+    # The one address that becomes an admin on first sign-in. The real address
+    # rather than a placeholder, because this resource deliberately has no
+    # ignore_changes on value: a placeholder here that production does not have
+    # makes every plan want to revert it, and that reversion rides along with
+    # the next unrelated apply — handing the site's admin to an address nobody
+    # owns. Not a secret, and not a new disclosure: it is the author address on
+    # every commit in this repository.
+    ADMIN_EMAIL = "samuel.ssa89@gmail.com"
 
     # Registered with each provider, and pointing at the domain this service
     # will answer on rather than at the function URL — changing them later
