@@ -104,6 +104,7 @@
     "*": "secretlint"
   },
   "overrides": {
+    "fastify": "^5.12.3",
     "find-my-way": "^9.7.0",
     "js-yaml": "^5.2.2",
     "minimatch": "^10.2.5",
