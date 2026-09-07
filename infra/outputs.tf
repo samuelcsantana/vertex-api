@@ -19,3 +19,8 @@ output "lambda_execution_role_arn" {
   description = "The identity the function runs as. It reads its own parameters and signs uploads for one bucket; nothing else."
   value       = aws_iam_role.lambda.arn
 }
+
+output "github_deploy_role_arn" {
+  description = "Role the deploy workflow assumes via OIDC. Goes in the repository's AWS_DEPLOY_ROLE_ARN variable — it is an ARN, not a credential, and nothing can assume it but a run on this repository's main branch."
+  value       = aws_iam_role.github_deploy.arn
+}

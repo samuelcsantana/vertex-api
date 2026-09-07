@@ -81,3 +81,9 @@ variable "api_domain" {
   type        = string
   default     = "api.samuelsantana.dev"
 }
+
+variable "github_repository" {
+  description = "owner/name of the repository whose main branch may assume the deploy role. It is pinned into the role's trust policy, so widening it here widens who can reach this account."
+  type        = string
+  default     = "samuelcsantana/vertex-api"
+}
