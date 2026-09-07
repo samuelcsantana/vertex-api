@@ -81,7 +81,12 @@ resource "aws_lambda_function" "api" {
   function_name = var.project
   role          = aws_iam_role.lambda.arn
   package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.api.repository_url}:${var.image_tag}"
+
+  # Declared because it already exists on the function, set out of band. Left
+  # undeclared, every plan wants to erase it, and the erasure rides along with
+  # whatever unrelated change is applied next.
+  description = "vertex-api behind CloudFront; config and rate-limit table from Parameter Store"
+  image_uri   = "${aws_ecr_repository.api.repository_url}:${var.image_tag}"
 
   # Matches the image, which is built --platform linux/amd64. A mismatch here
   # is not a performance question: the function simply fails to start.
