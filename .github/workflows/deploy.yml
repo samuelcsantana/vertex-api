@@ -1,0 +1,138 @@
+name: Deploy
+
+# Deliberately not `push: branches: [main]`. Merging is not deploying in this
+# project — the same rule the frontend follows on Vercel — and a push trigger
+# would publish whatever landed on main whether or not CI had finished, since
+# workflows on the same push run in parallel rather than in sequence. The
+# trigger is a person; everything after it is automated.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit, branch or tag to deploy. Defaults to main. Whatever is chosen, the role can only be assumed by a run on main, so this deploys the code at that ref using main's workflow."
+        required: false
+        default: main
+
+# The whole point of OIDC: id-token lets the run mint a token GitHub signs, and
+# AWS trades it for credentials that die with the job. No access key lives in
+# this repository.
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  # Two deploys racing would have the function end up on whichever image
+  # finished last, not the newest commit. Not cancel-in-progress: a deploy
+  # killed between `docker push` and `update-function-code` leaves an image in
+  # the registry that nothing points at, which is confusing to read later.
+  group: deploy-lambda
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: sa-east-1
+  FUNCTION_NAME: vertex-api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    # A deploy is the one place where "the tests passed on some other run" is
+    # not good enough, because the ref being deployed is chosen by hand and may
+    # not be the commit CI last looked at. So this re-runs them against exactly
+    # what is about to ship.
+    steps:
+      - name: Checkout the ref being deployed
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Resolve the image tag
+        id: tag
+        # The short SHA of the ref actually checked out, not of the branch tip
+        # at trigger time — they differ if something lands mid-run. Tagging by
+        # commit is what makes the ECR lifecycle policy's ten retained images
+        # a usable rollback target; `latest` would overwrite the only one.
+        run: echo "value=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Assume the deploy role
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: deploy-${{ steps.tag.outputs.value }}
+
+      - name: Log in to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build the image
+        # --platform because the function declares x86_64 and a mismatch does
+        # not degrade performance, it stops the function starting.
+        # --provenance/--sbom because BuildKit otherwise exports an OCI image
+        # index with an attestation manifest, and Lambda accepts only a single
+        # manifest — the build succeeds and UpdateFunctionCode is what fails,
+        # several minutes later, complaining about media types.
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/${{ env.FUNCTION_NAME }}:${{ steps.tag.outputs.value }}
+        run: |
+          docker build \
+            --platform linux/amd64 \
+            --provenance=false \
+            --sbom=false \
+            -f Dockerfile.lambda \
+            -t "$IMAGE" .
+
+      - name: Push the image
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/${{ env.FUNCTION_NAME }}:${{ steps.tag.outputs.value }}
+        run: docker push "$IMAGE"
+
+      - name: Point the function at it
+        env:
+          IMAGE: ${{ steps.ecr.outputs.registry }}/${{ env.FUNCTION_NAME }}:${{ steps.tag.outputs.value }}
+        run: |
+          aws lambda update-function-code \
+            --function-name "$FUNCTION_NAME" \
+            --region "$AWS_REGION" \
+            --image-uri "$IMAGE" \
+            --no-cli-pager > /dev/null
+
+          # UpdateFunctionCode returns as soon as the call is accepted. Without
+          # this wait the job would be green while the function still ran the
+          # old image, and the smoke test below would pass for the wrong reason.
+          aws lambda wait function-updated \
+            --function-name "$FUNCTION_NAME" \
+            --region "$AWS_REGION"
+
+      - name: Report what is actually running
+        run: |
+          aws lambda get-function \
+            --function-name "$FUNCTION_NAME" \
+            --region "$AWS_REGION" \
+            --query '{image:Code.ImageUri,modified:Configuration.LastModified,lastUpdate:Configuration.LastUpdateStatus}' \
+            --output table
+
+      - name: Smoke test the deployed API
+        # Through the CDN, on the real domain, because that is the path a
+        # visitor takes — a function URL answering proves less. The first call
+        # pays the cold start, so the timeout is generous rather than tight.
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 60 \
+            https://api.samuelsantana.dev/health)
+          echo "GET /health -> $code"
+          test "$code" = "200"
