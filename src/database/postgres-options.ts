@@ -12,15 +12,30 @@ import type { Options } from 'postgres';
  * places that open a transaction each do all their work inside it — so these
  * three options are what the switch actually costs.
  *
- * `prepare: false` — the older "PgBouncer can't do prepared statements at all"
- * advice is out of date: Neon's pooler tracks protocol-level prepared
- * statements, so leaving them on would most likely work. They are off because
- * being wrong is asymmetric. A disagreement between the driver's statement
- * cache and the pooler's shows up only under pooling, only in production, and
- * only intermittently, as `prepared statement "s1" already exists`. What
- * turning them off costs is one parse per query — noise next to a single
- * round trip to a database on another continent. Turn it back on when there is
- * a measurement saying it matters, not on principle.
+ * `prepare: false` — as of drizzle-orm 0.45 and postgres 3.4 this reaches no
+ * query the app runs. Every query goes through Drizzle, whose postgres-js
+ * driver executes each one as `client.unsafe(query, params)`; `unsafe()`
+ * marks the query itself `prepare: false` unless the caller asks otherwise
+ * (Drizzle doesn't), and the per-query setting beats this client-level one.
+ * Flipping it to `true` would change nothing today. It only governs
+ * tagged-template queries written straight against the postgres-js client,
+ * of which there are none.
+ *
+ * It stays `false` as the default for the first such query, or for a Drizzle
+ * upgrade that starts honouring it. The older "PgBouncer can't do prepared
+ * statements" advice is out of date — Neon's pooler tracks protocol-level
+ * prepared statements, so turning them on would most likely work — but being
+ * wrong is asymmetric: a disagreement between the driver's statement cache and
+ * the pooler's shows up only under pooling, only in production, and only
+ * intermittently, as a `prepared statement ... does not exist` error.
+ *
+ * What an unprepared query costs in postgres-js is a network round trip, not
+ * a parse. With parameters, it sends Parse/Describe, waits for the server to
+ * describe the parameter types, and only then sends Bind/Execute: two trips,
+ * where a cached prepared statement needs one. (Without parameters it uses the
+ * simple protocol, one trip either way.) Every Drizzle query already pays
+ * that, whatever this option says, so if the extra trip ever shows up in a
+ * measurement, the lever is how Drizzle calls the driver, not this flag.
  *
  * `max: 5` — behind a pooler the client-side pool is no longer *the* pool.
  * PgBouncer is, and it accepts far more clients than one Postgres ever could.
