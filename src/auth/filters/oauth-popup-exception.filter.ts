@@ -10,18 +10,21 @@ import {
   GithubEmailConflictException,
 } from '../exceptions/github-link.exceptions';
 import { GoogleAlreadyLinkedException } from '../exceptions/google-link.exceptions';
+import { OAuthStateMismatchException } from '../exceptions/oauth-state.exceptions';
 
 @Catch(
   GithubAlreadyLinkedException,
   GithubEmailConflictException,
   GoogleAlreadyLinkedException,
+  OAuthStateMismatchException,
 )
 export class OAuthPopupExceptionFilter implements ExceptionFilter {
   catch(
     exception:
       | GithubAlreadyLinkedException
       | GithubEmailConflictException
-      | GoogleAlreadyLinkedException,
+      | GoogleAlreadyLinkedException
+      | OAuthStateMismatchException,
     host: ArgumentsHost,
   ) {
     const res = host.switchToHttp().getResponse<FastifyReply>();

@@ -151,3 +151,28 @@ describe('GoogleStrategy — login flow', () => {
     expect(inserted.passwordHash).toMatch(/^\$argon2/);
   });
 });
+
+describe('GoogleStrategy — PKCE parameters', () => {
+  it("adds the challenge without dropping passport-google-oauth20's own parameters", () => {
+    const { strategy } = createStrategy({});
+
+    expect(
+      strategy.authorizationParams({
+        codeChallenge: 'challenge',
+        prompt: 'select_account',
+      } as Parameters<GoogleStrategy['authorizationParams']>[0]),
+    ).toEqual({
+      prompt: 'select_account',
+      code_challenge: 'challenge',
+      code_challenge_method: 'S256',
+    });
+  });
+
+  it('adds the verifier to the token request', () => {
+    const { strategy } = createStrategy({});
+
+    expect(strategy.tokenParams({ codeVerifier: 'verifier' })).toEqual({
+      code_verifier: 'verifier',
+    });
+  });
+});

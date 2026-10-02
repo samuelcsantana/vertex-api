@@ -20,6 +20,11 @@ import {
   GithubEmailConflictException,
 } from '../exceptions/github-link.exceptions';
 import { getVerifiedLinkUserId } from '../utils/link-cookie.util';
+import {
+  OAuthAuthenticateOptions,
+  pkceAuthorizationParams,
+  pkceTokenParams,
+} from '../utils/oauth-state.util';
 
 // passport-github2's typings omit `primary`/`verified`, which GitHub does
 // include on each entry in the `user:email` scope response.
@@ -74,6 +79,20 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
     }
 
     super.authenticate(...args);
+  }
+
+  // PKCE (RFC 7636). The guard generates the verifier and keeps it in the
+  // signed state cookie; these are the two hooks passport-oauth2 offers for
+  // adding parameters to the authorization redirect and to the token request.
+  authorizationParams(options: OAuthAuthenticateOptions): object {
+    return {
+      ...super.authorizationParams(options),
+      ...pkceAuthorizationParams(options),
+    };
+  }
+
+  tokenParams(options: OAuthAuthenticateOptions): object {
+    return { ...super.tokenParams(options), ...pkceTokenParams(options) };
   }
 
   async validate(
