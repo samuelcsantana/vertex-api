@@ -207,10 +207,11 @@ export class AuthController {
     request: FastifyRequest,
     res: FastifyReply,
   ) {
-    // vertex-web and vertex-api are on different domains (Vercel vs Render),
-    // so a cookie set here would be scoped to this API's own domain and the
-    // frontend's cookies() calls could never see it — no amount of polling
-    // bridges that gap. Redirecting the popup to the frontend's own callback
+    // vertex-web and vertex-api are on different domains (Vercel vs AWS
+    // Lambda behind CloudFront on api.samuelsantana.dev), so a cookie set
+    // here would be scoped to this API's own domain and the frontend's
+    // cookies() calls could never see it — no amount of polling bridges
+    // that gap. Redirecting the popup to the frontend's own callback
     // route instead lets vertex-web set the cookie itself, on its own
     // domain, via a Server Action.
     //

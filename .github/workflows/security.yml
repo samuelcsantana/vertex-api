@@ -2,9 +2,9 @@ name: Security
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
   pull_request:
-    branches: [main, develop]
+    branches: [main]
   schedule:
     # New advisories can land for dependencies already pinned in the
     # lockfile, with no code change of ours to trigger push/PR — catch
