@@ -15,6 +15,11 @@ import { users } from '../../database/schema';
 import { JwtPayload, UserRole } from '../interfaces/jwt-payload.interface';
 import { GoogleAlreadyLinkedException } from '../exceptions/google-link.exceptions';
 import { getVerifiedLinkUserId } from '../utils/link-cookie.util';
+import {
+  OAuthAuthenticateOptions,
+  pkceAuthorizationParams,
+  pkceTokenParams,
+} from '../utils/oauth-state.util';
 
 @Injectable()
 export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
@@ -55,6 +60,20 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     }
 
     super.authenticate(...args);
+  }
+
+  // PKCE (RFC 7636). The guard generates the verifier and keeps it in the
+  // signed state cookie; these are the two hooks passport-oauth2 offers for
+  // adding parameters to the authorization redirect and to the token request.
+  authorizationParams(options: OAuthAuthenticateOptions): object {
+    return {
+      ...super.authorizationParams(options),
+      ...pkceAuthorizationParams(options),
+    };
+  }
+
+  tokenParams(options: OAuthAuthenticateOptions): object {
+    return { ...super.tokenParams(options), ...pkceTokenParams(options) };
   }
 
   async validate(
