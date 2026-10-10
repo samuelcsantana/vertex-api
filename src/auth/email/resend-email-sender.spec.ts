@@ -54,7 +54,9 @@ describe('ResendEmailSender', () => {
       html: string;
     };
     expect(body.to).toEqual(['visitor@example.com']);
-    expect(body.subject).toBe('123456 is your sign-in code');
+    expect(body.subject).toBe(
+      '123456 is your sign-in code for samuelsantana.dev',
+    );
     expect(body.html).toContain('123456');
   });
 

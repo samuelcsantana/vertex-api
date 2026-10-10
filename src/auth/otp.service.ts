@@ -13,8 +13,8 @@ import { ErrorCode } from '../common/constants/error-codes';
 import { AuthService } from './auth.service';
 import { EmailSender } from './email/email-sender';
 import type { OtpEmailLocale } from './email/otp-email-template';
+import { OTP_TTL_MS } from './otp-lifetime';
 
-const OTP_TTL_MS = 10 * 60_000;
 const OTP_RESEND_COOLDOWN_MS = 60_000;
 const OTP_MAX_ATTEMPTS = 5;
 
